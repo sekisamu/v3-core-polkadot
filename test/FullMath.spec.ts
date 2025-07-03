@@ -1,21 +1,18 @@
 import { ethers } from 'hardhat'
-import { FullMathTest } from '../typechain/FullMathTest'
 import { expect } from './shared/expect'
 import { Decimal } from 'decimal.js'
 
-const {
-  BigNumber,
-  constants: { MaxUint256 },
-} = ethers
-const Q128 = BigNumber.from(2).pow(128)
+const Q128 = ethers.toBigInt(2) ** 128n
+const MaxUint256 = ethers.MaxUint256
 
 Decimal.config({ toExpNeg: -500, toExpPos: 500 })
 
 describe('FullMath', () => {
-  let fullMath: FullMathTest
+  let fullMath: any
+
   before('deploy FullMathTest', async () => {
     const factory = await ethers.getContractFactory('FullMathTest')
-    fullMath = (await factory.deploy()) as FullMathTest
+    fullMath = await factory.deploy()
   })
 
   describe('#mulDiv', () => {
@@ -32,7 +29,7 @@ describe('FullMath', () => {
       await expect(fullMath.mulDiv(Q128, Q128, 1)).to.be.reverted
     })
     it('reverts on overflow with all max inputs', async () => {
-      await expect(fullMath.mulDiv(MaxUint256, MaxUint256, MaxUint256.sub(1))).to.be.reverted
+      await expect(fullMath.mulDiv(MaxUint256, MaxUint256, MaxUint256 - 1n)).to.be.reverted
     })
 
     it('all max inputs', async () => {
@@ -40,47 +37,47 @@ describe('FullMath', () => {
     })
 
     it('accurate without phantom overflow', async () => {
-      const result = Q128.div(3)
+      const result = Q128 / 3n
       expect(
         await fullMath.mulDiv(
           Q128,
-          /*0.5=*/ BigNumber.from(50).mul(Q128).div(100),
-          /*1.5=*/ BigNumber.from(150).mul(Q128).div(100)
+          /*0.5=*/ (50n * Q128) / 100n,
+          /*1.5=*/ (150n * Q128) / 100n
         )
       ).to.eq(result)
     })
 
     it('accurate with phantom overflow', async () => {
-      const result = BigNumber.from(4375).mul(Q128).div(1000)
-      expect(await fullMath.mulDiv(Q128, BigNumber.from(35).mul(Q128), BigNumber.from(8).mul(Q128))).to.eq(result)
+      const result = (4375n * Q128) / 1000n
+      expect(await fullMath.mulDiv(Q128, 35n * Q128, 8n * Q128)).to.eq(result)
     })
 
     it('accurate with phantom overflow and repeating decimal', async () => {
-      const result = BigNumber.from(1).mul(Q128).div(3)
-      expect(await fullMath.mulDiv(Q128, BigNumber.from(1000).mul(Q128), BigNumber.from(3000).mul(Q128))).to.eq(result)
+      const result = Q128 / 3n
+      expect(await fullMath.mulDiv(Q128, 1000n * Q128, 3000n * Q128)).to.eq(result)
     })
   })
 
   describe('#mulDivRoundingUp', () => {
     it('reverts if denominator is 0', async () => {
-      await expect(fullMath.mulDivRoundingUp(Q128, 5, 0)).to.be.reverted
+      await expect(fullMath.mulDivRoundingUp(Q128, 5n, 0n)).to.be.reverted
     })
     it('reverts if denominator is 0 and numerator overflows', async () => {
-      await expect(fullMath.mulDivRoundingUp(Q128, Q128, 0)).to.be.reverted
+      await expect(fullMath.mulDivRoundingUp(Q128, Q128, 0n)).to.be.reverted
     })
     it('reverts if output overflows uint256', async () => {
-      await expect(fullMath.mulDivRoundingUp(Q128, Q128, 1)).to.be.reverted
+      await expect(fullMath.mulDivRoundingUp(Q128, Q128, 1n)).to.be.reverted
     })
     it('reverts on overflow with all max inputs', async () => {
-      await expect(fullMath.mulDivRoundingUp(MaxUint256, MaxUint256, MaxUint256.sub(1))).to.be.reverted
+      await expect(fullMath.mulDivRoundingUp(MaxUint256, MaxUint256, MaxUint256 - 1n)).to.be.reverted
     })
 
     it('reverts if mulDiv overflows 256 bits after rounding up', async () => {
       await expect(
         fullMath.mulDivRoundingUp(
-          '535006138814359',
-          '432862656469423142931042426214547535783388063929571229938474969',
-          '2'
+          535006138814359n,
+          432862656469423142931042426214547535783388063929571229938474969n,
+          2n
         )
       ).to.be.reverted
     })
@@ -88,9 +85,9 @@ describe('FullMath', () => {
     it('reverts if mulDiv overflows 256 bits after rounding up case 2', async () => {
       await expect(
         fullMath.mulDivRoundingUp(
-          '115792089237316195423570985008687907853269984659341747863450311749907997002549',
-          '115792089237316195423570985008687907853269984659341747863450311749907997002550',
-          '115792089237316195423570985008687907853269984653042931687443039491902864365164'
+          115792089237316195423570985008687907853269984659341747863450311749907997002549n,
+          115792089237316195423570985008687907853269984659341747863450311749907997002550n,
+          115792089237316195423570985008687907853269984653042931687443039491902864365164n
         )
       ).to.be.reverted
     })
@@ -100,33 +97,31 @@ describe('FullMath', () => {
     })
 
     it('accurate without phantom overflow', async () => {
-      const result = Q128.div(3).add(1)
+      const result = (Q128 / 3n) + 1n
       expect(
         await fullMath.mulDivRoundingUp(
           Q128,
-          /*0.5=*/ BigNumber.from(50).mul(Q128).div(100),
-          /*1.5=*/ BigNumber.from(150).mul(Q128).div(100)
+          /*0.5=*/ (50n * Q128) / 100n,
+          /*1.5=*/ (150n * Q128) / 100n
         )
       ).to.eq(result)
     })
 
     it('accurate with phantom overflow', async () => {
-      const result = BigNumber.from(4375).mul(Q128).div(1000)
-      expect(await fullMath.mulDivRoundingUp(Q128, BigNumber.from(35).mul(Q128), BigNumber.from(8).mul(Q128))).to.eq(
-        result
-      )
+      const result = (4375n * Q128) / 1000n
+      expect(await fullMath.mulDivRoundingUp(Q128, 35n * Q128, 8n * Q128)).to.eq(result)
     })
 
     it('accurate with phantom overflow and repeating decimal', async () => {
-      const result = BigNumber.from(1).mul(Q128).div(3).add(1)
+      const result = (Q128 / 3n) + 1n
       expect(
-        await fullMath.mulDivRoundingUp(Q128, BigNumber.from(1000).mul(Q128), BigNumber.from(3000).mul(Q128))
+        await fullMath.mulDivRoundingUp(Q128, 1000n * Q128, 3000n * Q128)
       ).to.eq(result)
     })
   })
 
   function pseudoRandomBigNumber() {
-    return BigNumber.from(new Decimal(MaxUint256.toString()).mul(Math.random().toString()).round().toString())
+    return ethers.toBigInt(new Decimal(MaxUint256.toString()).mul(Math.random().toString()).round().toString())
   }
 
   // tiny fuzzer. unskip to run
@@ -155,25 +150,22 @@ describe('FullMath', () => {
 
     await Promise.all(
       tests.map(async ({ input: { x, y, d }, floored, ceiled }) => {
-        if (d.eq(0)) {
+        if (d === 0n) {
           await expect(floored).to.be.reverted
           await expect(ceiled).to.be.reverted
           return
         }
 
-        if (x.eq(0) || y.eq(0)) {
-          await expect(floored).to.eq(0)
-          await expect(ceiled).to.eq(0)
-        } else if (x.mul(y).div(d).gt(MaxUint256)) {
+        if (x === 0n || y === 0n) {
+          await expect(floored).to.eq(0n)
+          await expect(ceiled).to.eq(0n)
+        } else if ((x * y) / d > MaxUint256) {
           await expect(floored).to.be.reverted
           await expect(ceiled).to.be.reverted
         } else {
-          expect(await floored).to.eq(x.mul(y).div(d))
+          expect(await floored).to.eq((x * y) / d)
           expect(await ceiled).to.eq(
-            x
-              .mul(y)
-              .div(d)
-              .add(x.mul(y).mod(d).gt(0) ? 1 : 0)
+            (x * y) / d + ((x * y) % d > 0n ? 1n : 0n)
           )
         }
       })

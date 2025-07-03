@@ -1,44 +1,39 @@
 import { expect } from './shared/expect'
-import { LiquidityMathTest } from '../typechain/LiquidityMathTest'
-import { ethers, waffle } from 'hardhat'
+import { ethers } from 'hardhat'
 import snapshotGasCost from './shared/snapshotGasCost'
 
-const { BigNumber } = ethers
-
 describe('LiquidityMath', () => {
-  let liquidityMath: LiquidityMathTest
-  const fixture = async () => {
+  let liquidityMath: any
+
+  before('deploy LiquidityMathTest', async () => {
     const factory = await ethers.getContractFactory('LiquidityMathTest')
-    return (await factory.deploy()) as LiquidityMathTest
-  }
-  beforeEach('deploy LiquidityMathTest', async () => {
-    liquidityMath = await waffle.loadFixture(fixture)
+    liquidityMath = await factory.deploy()
   })
 
   describe('#addDelta', () => {
-    it('1 + 0', async () => {
-      expect(await liquidityMath.addDelta(1, 0)).to.eq(1)
+    it('returns correct value for 1 + 0', async () => {
+      expect(await liquidityMath.addDelta(1n, 0n)).to.eq(1n)
     })
-    it('1 + -1', async () => {
-      expect(await liquidityMath.addDelta(1, -1)).to.eq(0)
+    it('returns correct value for 1 + -1', async () => {
+      expect(await liquidityMath.addDelta(1n, -1n)).to.eq(0n)
     })
-    it('1 + 1', async () => {
-      expect(await liquidityMath.addDelta(1, 1)).to.eq(2)
+    it('returns correct value for 1 + 1', async () => {
+      expect(await liquidityMath.addDelta(1n, 1n)).to.eq(2n)
     })
-    it('2**128-15 + 15 overflows', async () => {
-      await expect(liquidityMath.addDelta(BigNumber.from(2).pow(128).sub(15), 15)).to.be.revertedWith('LA')
+    it('reverts on overflow when adding to large number', async () => {
+      await expect(liquidityMath.addDelta(2n ** 128n - 15n, 15n)).to.be.revertedWith('LA')
     })
-    it('0 + -1 underflows', async () => {
-      await expect(liquidityMath.addDelta(0, -1)).to.be.revertedWith('LS')
+    it('reverts on underflow when subtracting from zero', async () => {
+      await expect(liquidityMath.addDelta(0n, -1n)).to.be.revertedWith('LS')
     })
-    it('3 + -4 underflows', async () => {
-      await expect(liquidityMath.addDelta(3, -4)).to.be.revertedWith('LS')
+    it('reverts on underflow when subtracting more than available', async () => {
+      await expect(liquidityMath.addDelta(3n, -4n)).to.be.revertedWith('LS')
     })
-    it('gas add', async () => {
-      await snapshotGasCost(liquidityMath.getGasCostOfAddDelta(15, 4))
+    it('gas cost of addition', async () => {
+      await snapshotGasCost(liquidityMath.getGasCostOfAddDelta(15n, 4n))
     })
-    it('gas sub', async () => {
-      await snapshotGasCost(liquidityMath.getGasCostOfAddDelta(15, -4))
+    it('gas cost of subtraction', async () => {
+      await snapshotGasCost(liquidityMath.getGasCostOfAddDelta(15n, -4n))
     })
   })
 })

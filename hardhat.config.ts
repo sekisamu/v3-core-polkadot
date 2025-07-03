@@ -3,6 +3,7 @@ import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-ethers";
 import "@parity/hardhat-polkadot";
 import * as dotenv from "dotenv";
+
 dotenv.config();
 
 const usePolkaVM = process.env.USE_POLKAVM === "true";
@@ -12,7 +13,7 @@ const config: HardhatUserConfig = {
   resolc: {
     compilerSource: "binary",
     settings: {
-      compilerPath: "~/.cargo/bin/resolc-0.1.0-dev.16",
+      compilerPath: "~/.cargo/bin/resolc-0.3.0",
     }
   },
   networks: {
@@ -20,12 +21,12 @@ const config: HardhatUserConfig = {
       ? {
           polkavm: true,
           nodeConfig: {
-            nodeBinaryPath: "../bin/substrate-node",
+            nodeBinaryPath: "../../../code/polkadot-sdk/target/release/substrate-node",
             rpcPort: 8000,
             dev: true,
           },
           adapterConfig: {
-            adapterBinaryPath: "../bin/eth-rpc",
+            adapterBinaryPath: "../../../code/polkadot-sdk/target/release/eth-rpc",
             dev: true,
           },
         }

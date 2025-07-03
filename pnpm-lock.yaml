@@ -11,7 +11,13 @@ importers:
       '@parity/hardhat-polkadot':
         specifier: ^0.1.5
         version: 0.1.5(@parity/hardhat-polkadot-node@0.1.1(hardhat@2.24.0(ts-node@10.9.2(@types/node@22.15.19)(typescript@5.8.3))(typescript@5.8.3)))(@parity/hardhat-polkadot-resolc@0.1.3(hardhat@2.24.0(ts-node@10.9.2(@types/node@22.15.19)(typescript@5.8.3))(typescript@5.8.3)))(hardhat@2.24.0(ts-node@10.9.2(@types/node@22.15.19)(typescript@5.8.3))(typescript@5.8.3))
+      decimal.js:
+        specifier: ^10.5.0
+        version: 10.5.0
     devDependencies:
+      '@ethersproject/bignumber':
+        specifier: ^5.8.0
+        version: 5.8.0
       '@nomicfoundation/hardhat-chai-matchers':
         specifier: ^2.0.0
         version: 2.0.8(@nomicfoundation/hardhat-ethers@3.0.8(ethers@6.14.1)(hardhat@2.24.0(ts-node@10.9.2(@types/node@22.15.19)(typescript@5.8.3))(typescript@5.8.3)))(chai@4.5.0)(ethers@6.14.1)(hardhat@2.24.0(ts-node@10.9.2(@types/node@22.15.19)(typescript@5.8.3))(typescript@5.8.3))
@@ -33,6 +39,12 @@ importers:
       '@nomicfoundation/hardhat-verify':
         specifier: ^2.0.0
         version: 2.0.13(hardhat@2.24.0(ts-node@10.9.2(@types/node@22.15.19)(typescript@5.8.3))(typescript@5.8.3))
+      '@parity/hardhat-polkadot-node':
+        specifier: ^0.1.1
+        version: 0.1.1(hardhat@2.24.0(ts-node@10.9.2(@types/node@22.15.19)(typescript@5.8.3))(typescript@5.8.3))
+      '@parity/hardhat-polkadot-resolc':
+        specifier: ^0.1.3
+        version: 0.1.3(hardhat@2.24.0(ts-node@10.9.2(@types/node@22.15.19)(typescript@5.8.3))(typescript@5.8.3))
       '@typechain/ethers-v6':
         specifier: ^0.5.0
         version: 0.5.1(ethers@6.14.1)(typechain@8.3.2(typescript@5.8.3))(typescript@5.8.3)
@@ -913,6 +925,9 @@ packages:
   decamelize@4.0.0:
     resolution: {integrity: sha512-9iE1PgSik9HeIIw2JO94IidnE3eBoQrFJ3w7sFuzSX4DpmZ3v5sZpUiV5Swcf6mQEF+Y0ru8Neo+p+nyh2J+hQ==}
     engines: {node: '>=10'}
+
+  decimal.js@10.5.0:
+    resolution: {integrity: sha512-8vDa8Qxvr/+d94hSh5P3IJwI5t8/c0KsMp+g8bNw9cY2icONa5aPfvKeieW1WlG0WQYwwhJ7mjui2xtiePQSXw==}
 
   deep-eql@4.1.4:
     resolution: {integrity: sha512-SUwdGfqdKOwxCPeVYjwSyRpJ7Z+fhpwIAtmCUdZIWZ/YP5R9WAsyuSgpLVDi9bjWoN2LXHNss/dk3urXtdQxGg==}
@@ -3273,6 +3288,8 @@ snapshots:
       supports-color: 8.1.1
 
   decamelize@4.0.0: {}
+
+  decimal.js@10.5.0: {}
 
   deep-eql@4.1.4:
     dependencies:

@@ -1,4 +1,3 @@
-import { BigNumber, BigNumberish } from 'ethers'
 import { expect } from './expect'
 
 // helper function because we cannot do a simple deep equals with the
@@ -10,16 +9,16 @@ export default function checkObservationEquals(
     initialized,
     secondsPerLiquidityCumulativeX128,
   }: {
-    tickCumulative: BigNumber
-    secondsPerLiquidityCumulativeX128: BigNumber
+    tickCumulative: bigint
+    secondsPerLiquidityCumulativeX128: bigint
     initialized: boolean
-    blockTimestamp: number
+    blockTimestamp: bigint
   },
   expected: {
-    tickCumulative: BigNumberish
-    secondsPerLiquidityCumulativeX128: BigNumberish
+    tickCumulative: bigint
+    secondsPerLiquidityCumulativeX128: bigint
     initialized: boolean
-    blockTimestamp: number
+    blockTimestamp: bigint
   }
 ) {
   expect(
