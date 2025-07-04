@@ -1,7 +1,5 @@
 import { expect } from './shared/expect'
 import { ethers } from 'hardhat'
-import { Contract } from 'ethers'
-import snapshotGasCost from './shared/snapshotGasCost'
 
 describe('BitMath', () => {
   let bitMath: any
