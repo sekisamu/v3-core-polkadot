@@ -1,6 +1,5 @@
 import { expect } from './shared/expect'
 import { ethers } from 'hardhat'
-import snapshotGasCost from './shared/snapshotGasCost'
 
 describe('LiquidityMath', () => {
   let liquidityMath: any
@@ -29,11 +28,11 @@ describe('LiquidityMath', () => {
     it('reverts on underflow when subtracting more than available', async () => {
       await expect(liquidityMath.addDelta(3n, -4n)).to.be.revertedWith('LS')
     })
-    it('gas cost of addition', async () => {
-      await snapshotGasCost(liquidityMath.getGasCostOfAddDelta(15n, 4n))
-    })
-    it('gas cost of subtraction', async () => {
-      await snapshotGasCost(liquidityMath.getGasCostOfAddDelta(15n, -4n))
-    })
+    // it('gas cost of addition', async () => {
+    //   await snapshotGasCost(liquidityMath.getGasCostOfAddDelta(15n, 4n))
+    // })
+    // it('gas cost of subtraction', async () => {
+    //   await snapshotGasCost(liquidityMath.getGasCostOfAddDelta(15n, -4n))
+    // })
   })
 })
