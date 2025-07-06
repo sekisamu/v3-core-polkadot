@@ -2,8 +2,8 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-ethers";
 import "@parity/hardhat-polkadot";
-import * as dotenv from "dotenv";
 
+import * as dotenv from "dotenv";
 dotenv.config();
 
 const usePolkaVM = process.env.USE_POLKAVM === "true";
@@ -14,7 +14,15 @@ const config: HardhatUserConfig = {
     compilerSource: "binary",
     settings: {
       compilerPath: "~/.cargo/bin/resolc-0.3.0",
+      optimizer: {
+        enabled: true,
+        parameters: "z",
+        fallbackOz: true,
+      },
     }
+  },
+  mocha: {
+    timeout: 100000
   },
   networks: {
     hardhat: usePolkaVM
@@ -33,16 +41,17 @@ const config: HardhatUserConfig = {
       : {},
     local: {
       polkavm: true,
-      url: 'http://127.0.0.1:8545',
+      // url: 'http://127.0.0.1:8545',
+      url: 'http://maat:8545',
       accounts: [
         process.env.LOCAL_PRIV_KEY as string,
         process.env.AH_PRIV_KEY as string,
       ],
     },
 
-    ah: {
+    passethub: {
       polkavm: true,
-      url: "https://westend-asset-hub-eth-rpc.polkadot.io",
+      url: "https://testnet-passet-hub.polkadot.io",
       accounts: [
         process.env.AH_PRIV_KEY as string,
       ],
