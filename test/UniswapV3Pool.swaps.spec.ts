@@ -1,10 +1,11 @@
 import { Decimal } from 'decimal.js'
-import { BigNumber, BigNumberish, ContractTransaction, Wallet } from 'ethers'
-import { ethers, waffle } from 'hardhat'
-import { MockTimeUniswapV3Pool } from '../typechain/MockTimeUniswapV3Pool'
-import { TestERC20 } from '../typechain/TestERC20'
-
-import { TestUniswapV3Callee } from '../typechain/TestUniswapV3Callee'
+import { ContractTransactionResponse } from 'ethers'
+import { ethers } from 'hardhat'
+import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers'
+import { loadFixture } from '@nomicfoundation/hardhat-network-helpers'
+import { MockTimeUniswapV3Pool } from '../typechain-types/test/MockTimeUniswapV3Pool'
+import { TestERC20 } from '../typechain-types/test/TestERC20'
+import { TestUniswapV3Callee } from '../typechain-types/test/TestUniswapV3Callee'
 import { expect } from './shared/expect'
 import { poolFixture } from './shared/fixtures'
 import { formatPrice, formatTokenAmount } from './shared/format'
@@ -24,44 +25,43 @@ import {
 
 Decimal.config({ toExpNeg: -500, toExpPos: 500 })
 
-const createFixtureLoader = waffle.createFixtureLoader
-const { constants } = ethers
+const { MaxUint256, ZeroAddress } = ethers
 
 interface BaseSwapTestCase {
   zeroForOne: boolean
-  sqrtPriceLimit?: BigNumber
+  sqrtPriceLimit?: bigint
 }
 interface SwapExact0For1TestCase extends BaseSwapTestCase {
   zeroForOne: true
   exactOut: false
-  amount0: BigNumberish
-  sqrtPriceLimit?: BigNumber
+  amount0: bigint
+  sqrtPriceLimit?: bigint
 }
 interface SwapExact1For0TestCase extends BaseSwapTestCase {
   zeroForOne: false
   exactOut: false
-  amount1: BigNumberish
-  sqrtPriceLimit?: BigNumber
+  amount1: bigint
+  sqrtPriceLimit?: bigint
 }
 interface Swap0ForExact1TestCase extends BaseSwapTestCase {
   zeroForOne: true
   exactOut: true
-  amount1: BigNumberish
-  sqrtPriceLimit?: BigNumber
+  amount1: bigint
+  sqrtPriceLimit?: bigint
 }
 interface Swap1ForExact0TestCase extends BaseSwapTestCase {
   zeroForOne: false
   exactOut: true
-  amount0: BigNumberish
-  sqrtPriceLimit?: BigNumber
+  amount0: bigint
+  sqrtPriceLimit?: bigint
 }
 interface SwapToHigherPrice extends BaseSwapTestCase {
   zeroForOne: false
-  sqrtPriceLimit: BigNumber
+  sqrtPriceLimit: bigint
 }
 interface SwapToLowerPrice extends BaseSwapTestCase {
   zeroForOne: true
-  sqrtPriceLimit: BigNumber
+  sqrtPriceLimit: bigint
 }
 type SwapTestCase =
   | SwapExact0For1TestCase
@@ -99,15 +99,15 @@ function swapCaseToDescription(testCase: SwapTestCase): string {
 type PoolFunctions = ReturnType<typeof createPoolFunctions>
 
 // can't use address zero because the ERC20 token does not allow it
-const SWAP_RECIPIENT_ADDRESS = constants.AddressZero.slice(0, -1) + '1'
-const POSITION_PROCEEDS_OUTPUT_ADDRESS = constants.AddressZero.slice(0, -1) + '2'
+const SWAP_RECIPIENT_ADDRESS = ZeroAddress.slice(0, -1) + '1'
+const POSITION_PROCEEDS_OUTPUT_ADDRESS = ZeroAddress.slice(0, -1) + '2'
 
 async function executeSwap(
   pool: MockTimeUniswapV3Pool,
   testCase: SwapTestCase,
   poolFunctions: PoolFunctions
-): Promise<ContractTransaction> {
-  let swap: ContractTransaction
+): Promise<ContractTransactionResponse> {
+  let swap: ContractTransactionResponse
   if ('exactOut' in testCase) {
     if (testCase.exactOut) {
       if (testCase.zeroForOne) {
@@ -137,84 +137,84 @@ const DEFAULT_POOL_SWAP_TESTS: SwapTestCase[] = [
   {
     zeroForOne: true,
     exactOut: false,
-    amount0: expandTo18Decimals(1),
+    amount0: expandTo18Decimals(1n),
   },
   {
     zeroForOne: false,
     exactOut: false,
-    amount1: expandTo18Decimals(1),
+    amount1: expandTo18Decimals(1n),
   },
   {
     zeroForOne: true,
     exactOut: true,
-    amount1: expandTo18Decimals(1),
+    amount1: expandTo18Decimals(1n),
   },
   {
     zeroForOne: false,
     exactOut: true,
-    amount0: expandTo18Decimals(1),
+    amount0: expandTo18Decimals(1n),
   },
   // swap large amounts in/out with a price limit
   {
     zeroForOne: true,
     exactOut: false,
-    amount0: expandTo18Decimals(1),
-    sqrtPriceLimit: encodePriceSqrt(50, 100),
+    amount0: expandTo18Decimals(1n),
+    sqrtPriceLimit: encodePriceSqrt(50n, 100n),
   },
   {
     zeroForOne: false,
     exactOut: false,
-    amount1: expandTo18Decimals(1),
-    sqrtPriceLimit: encodePriceSqrt(200, 100),
+    amount1: expandTo18Decimals(1n),
+    sqrtPriceLimit: encodePriceSqrt(200n, 100n),
   },
   {
     zeroForOne: true,
     exactOut: true,
-    amount1: expandTo18Decimals(1),
-    sqrtPriceLimit: encodePriceSqrt(50, 100),
+    amount1: expandTo18Decimals(1n),
+    sqrtPriceLimit: encodePriceSqrt(50n, 100n),
   },
   {
     zeroForOne: false,
     exactOut: true,
-    amount0: expandTo18Decimals(1),
-    sqrtPriceLimit: encodePriceSqrt(200, 100),
+    amount0: expandTo18Decimals(1n),
+    sqrtPriceLimit: encodePriceSqrt(200n, 100n),
   },
   // swap small amounts in/out
   {
     zeroForOne: true,
     exactOut: false,
-    amount0: 1000,
+    amount0: 1000n,
   },
   {
     zeroForOne: false,
     exactOut: false,
-    amount1: 1000,
+    amount1: 1000n,
   },
   {
     zeroForOne: true,
     exactOut: true,
-    amount1: 1000,
+    amount1: 1000n,
   },
   {
     zeroForOne: false,
     exactOut: true,
-    amount0: 1000,
+    amount0: 1000n,
   },
   // swap arbitrary input to price
   {
-    sqrtPriceLimit: encodePriceSqrt(5, 2),
+    sqrtPriceLimit: encodePriceSqrt(5n, 2n),
     zeroForOne: false,
   },
   {
-    sqrtPriceLimit: encodePriceSqrt(2, 5),
+    sqrtPriceLimit: encodePriceSqrt(2n, 5n),
     zeroForOne: true,
   },
   {
-    sqrtPriceLimit: encodePriceSqrt(5, 2),
+    sqrtPriceLimit: encodePriceSqrt(5n, 2n),
     zeroForOne: true,
   },
   {
-    sqrtPriceLimit: encodePriceSqrt(2, 5),
+    sqrtPriceLimit: encodePriceSqrt(2n, 5n),
     zeroForOne: false,
   },
 ]
@@ -222,14 +222,14 @@ const DEFAULT_POOL_SWAP_TESTS: SwapTestCase[] = [
 interface Position {
   tickLower: number
   tickUpper: number
-  liquidity: BigNumberish
+  liquidity: bigint
 }
 
 interface PoolTestCase {
   description: string
   feeAmount: number
   tickSpacing: number
-  startingPrice: BigNumber
+  startingPrice: bigint
   positions: Position[]
   swapTests?: SwapTestCase[]
 }
@@ -239,12 +239,12 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'low fee, 1:1 price, 2e18 max range liquidity',
     feeAmount: FeeAmount.LOW,
     tickSpacing: TICK_SPACINGS[FeeAmount.LOW],
-    startingPrice: encodePriceSqrt(1, 1),
+    startingPrice: encodePriceSqrt(1n, 1n),
     positions: [
       {
-        tickLower: getMinTick(TICK_SPACINGS[FeeAmount.LOW]),
-        tickUpper: getMaxTick(TICK_SPACINGS[FeeAmount.LOW]),
-        liquidity: expandTo18Decimals(2),
+        tickLower: getMinTick(Number(TICK_SPACINGS[FeeAmount.LOW])),
+        tickUpper: getMaxTick(Number(TICK_SPACINGS[FeeAmount.LOW])),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -252,12 +252,12 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'medium fee, 1:1 price, 2e18 max range liquidity',
     feeAmount: FeeAmount.MEDIUM,
     tickSpacing: TICK_SPACINGS[FeeAmount.MEDIUM],
-    startingPrice: encodePriceSqrt(1, 1),
+    startingPrice: encodePriceSqrt(1n, 1n),
     positions: [
       {
-        tickLower: getMinTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        tickUpper: getMaxTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        liquidity: expandTo18Decimals(2),
+        tickLower: getMinTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        tickUpper: getMaxTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -265,12 +265,12 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'high fee, 1:1 price, 2e18 max range liquidity',
     feeAmount: FeeAmount.HIGH,
     tickSpacing: TICK_SPACINGS[FeeAmount.HIGH],
-    startingPrice: encodePriceSqrt(1, 1),
+    startingPrice: encodePriceSqrt(1n, 1n),
     positions: [
       {
-        tickLower: getMinTick(TICK_SPACINGS[FeeAmount.HIGH]),
-        tickUpper: getMaxTick(TICK_SPACINGS[FeeAmount.HIGH]),
-        liquidity: expandTo18Decimals(2),
+        tickLower: getMinTick(Number(TICK_SPACINGS[FeeAmount.HIGH])),
+        tickUpper: getMaxTick(Number(TICK_SPACINGS[FeeAmount.HIGH])),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -278,12 +278,12 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'medium fee, 10:1 price, 2e18 max range liquidity',
     feeAmount: FeeAmount.MEDIUM,
     tickSpacing: TICK_SPACINGS[FeeAmount.MEDIUM],
-    startingPrice: encodePriceSqrt(10, 1),
+    startingPrice: encodePriceSqrt(10n, 1n),
     positions: [
       {
-        tickLower: getMinTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        tickUpper: getMaxTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        liquidity: expandTo18Decimals(2),
+        tickLower: getMinTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        tickUpper: getMaxTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -291,12 +291,12 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'medium fee, 1:10 price, 2e18 max range liquidity',
     feeAmount: FeeAmount.MEDIUM,
     tickSpacing: TICK_SPACINGS[FeeAmount.MEDIUM],
-    startingPrice: encodePriceSqrt(1, 10),
+    startingPrice: encodePriceSqrt(1n, 10n),
     positions: [
       {
-        tickLower: getMinTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        tickUpper: getMaxTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        liquidity: expandTo18Decimals(2),
+        tickLower: getMinTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        tickUpper: getMaxTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -304,17 +304,17 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'medium fee, 1:1 price, 0 liquidity, all liquidity around current price',
     feeAmount: FeeAmount.MEDIUM,
     tickSpacing: TICK_SPACINGS[FeeAmount.MEDIUM],
-    startingPrice: encodePriceSqrt(1, 1),
+    startingPrice: encodePriceSqrt(1n, 1n),
     positions: [
       {
-        tickLower: getMinTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        tickUpper: -TICK_SPACINGS[FeeAmount.MEDIUM],
-        liquidity: expandTo18Decimals(2),
+        tickLower: getMinTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        tickUpper: -Number(TICK_SPACINGS[FeeAmount.MEDIUM]),
+        liquidity: expandTo18Decimals(2n),
       },
       {
-        tickLower: TICK_SPACINGS[FeeAmount.MEDIUM],
-        tickUpper: getMaxTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        liquidity: expandTo18Decimals(2),
+        tickLower: Number(TICK_SPACINGS[FeeAmount.MEDIUM]),
+        tickUpper: getMaxTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -322,22 +322,22 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'medium fee, 1:1 price, additional liquidity around current price',
     feeAmount: FeeAmount.MEDIUM,
     tickSpacing: TICK_SPACINGS[FeeAmount.MEDIUM],
-    startingPrice: encodePriceSqrt(1, 1),
+    startingPrice: encodePriceSqrt(1n, 1n),
     positions: [
       {
-        tickLower: getMinTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        tickUpper: getMaxTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        liquidity: expandTo18Decimals(2),
+        tickLower: getMinTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        tickUpper: getMaxTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        liquidity: expandTo18Decimals(2n),
       },
       {
-        tickLower: getMinTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        tickUpper: -TICK_SPACINGS[FeeAmount.MEDIUM],
-        liquidity: expandTo18Decimals(2),
+        tickLower: getMinTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        tickUpper: -Number(TICK_SPACINGS[FeeAmount.MEDIUM]),
+        liquidity: expandTo18Decimals(2n),
       },
       {
-        tickLower: TICK_SPACINGS[FeeAmount.MEDIUM],
-        tickUpper: getMaxTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        liquidity: expandTo18Decimals(2),
+        tickLower: Number(TICK_SPACINGS[FeeAmount.MEDIUM]),
+        tickUpper: getMaxTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -345,12 +345,12 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'low fee, large liquidity around current price (stable swap)',
     feeAmount: FeeAmount.LOW,
     tickSpacing: TICK_SPACINGS[FeeAmount.LOW],
-    startingPrice: encodePriceSqrt(1, 1),
+    startingPrice: encodePriceSqrt(1n, 1n),
     positions: [
       {
-        tickLower: -TICK_SPACINGS[FeeAmount.LOW],
-        tickUpper: TICK_SPACINGS[FeeAmount.LOW],
-        liquidity: expandTo18Decimals(2),
+        tickLower: -Number(TICK_SPACINGS[FeeAmount.LOW]),
+        tickUpper: Number(TICK_SPACINGS[FeeAmount.LOW]),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -358,12 +358,12 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'medium fee, token0 liquidity only',
     feeAmount: FeeAmount.MEDIUM,
     tickSpacing: TICK_SPACINGS[FeeAmount.MEDIUM],
-    startingPrice: encodePriceSqrt(1, 1),
+    startingPrice: encodePriceSqrt(1n, 1n),
     positions: [
       {
         tickLower: 0,
-        tickUpper: 2000 * TICK_SPACINGS[FeeAmount.MEDIUM],
-        liquidity: expandTo18Decimals(2),
+        tickUpper: 2000 * Number(TICK_SPACINGS[FeeAmount.MEDIUM]),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -371,12 +371,12 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'medium fee, token1 liquidity only',
     feeAmount: FeeAmount.MEDIUM,
     tickSpacing: TICK_SPACINGS[FeeAmount.MEDIUM],
-    startingPrice: encodePriceSqrt(1, 1),
+    startingPrice: encodePriceSqrt(1n, 1n),
     positions: [
       {
-        tickLower: -2000 * TICK_SPACINGS[FeeAmount.MEDIUM],
+        tickLower: -2000 * Number(TICK_SPACINGS[FeeAmount.MEDIUM]),
         tickUpper: 0,
-        liquidity: expandTo18Decimals(2),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -384,12 +384,12 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'close to max price',
     feeAmount: FeeAmount.MEDIUM,
     tickSpacing: TICK_SPACINGS[FeeAmount.MEDIUM],
-    startingPrice: encodePriceSqrt(BigNumber.from(2).pow(127), 1),
+    startingPrice: encodePriceSqrt(2n ** 127n, 1n),
     positions: [
       {
-        tickLower: getMinTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        tickUpper: getMaxTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        liquidity: expandTo18Decimals(2),
+        tickLower: getMinTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        tickUpper: getMaxTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -397,12 +397,12 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'close to min price',
     feeAmount: FeeAmount.MEDIUM,
     tickSpacing: TICK_SPACINGS[FeeAmount.MEDIUM],
-    startingPrice: encodePriceSqrt(1, BigNumber.from(2).pow(127)),
+    startingPrice: encodePriceSqrt(1n, 2n ** 127n),
     positions: [
       {
-        tickLower: getMinTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        tickUpper: getMaxTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        liquidity: expandTo18Decimals(2),
+        tickLower: getMinTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        tickUpper: getMaxTick(Number(TICK_SPACINGS[FeeAmount.MEDIUM])),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -410,7 +410,7 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'max full range liquidity at 1:1 price with default fee',
     feeAmount: FeeAmount.MEDIUM,
     tickSpacing: TICK_SPACINGS[FeeAmount.MEDIUM],
-    startingPrice: encodePriceSqrt(1, 1),
+    startingPrice: encodePriceSqrt(1n, 1n),
     positions: [
       {
         tickLower: getMinTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
@@ -423,12 +423,12 @@ const TEST_POOLS: PoolTestCase[] = [
     description: 'initialized at the max ratio',
     feeAmount: FeeAmount.MEDIUM,
     tickSpacing: TICK_SPACINGS[FeeAmount.MEDIUM],
-    startingPrice: MAX_SQRT_RATIO.sub(1),
+    startingPrice: MAX_SQRT_RATIO - 1n,
     positions: [
       {
         tickLower: getMinTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
         tickUpper: getMaxTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        liquidity: expandTo18Decimals(2),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
@@ -441,14 +441,14 @@ const TEST_POOLS: PoolTestCase[] = [
       {
         tickLower: getMinTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
         tickUpper: getMaxTick(TICK_SPACINGS[FeeAmount.MEDIUM]),
-        liquidity: expandTo18Decimals(2),
+        liquidity: expandTo18Decimals(2n),
       },
     ],
   },
 ]
 
 describe('UniswapV3Pool swap tests', () => {
-  let wallet: Wallet, other: Wallet
+  let wallet: SignerWithAddress, other: SignerWithAddress
 
   let loadFixture: ReturnType<typeof createFixtureLoader>
 
@@ -474,8 +474,8 @@ describe('UniswapV3Pool swap tests', () => {
         }
 
         const [poolBalance0, poolBalance1] = await Promise.all([
-          token0.balanceOf(pool.address),
-          token1.balanceOf(pool.address),
+          token0.balanceOf(await pool.getAddress()),
+          token1.balanceOf(await pool.getAddress()),
         ])
 
         return { token0, token1, pool, poolFunctions, poolBalance0, poolBalance1, swapTarget }
@@ -492,9 +492,7 @@ describe('UniswapV3Pool swap tests', () => {
       let poolFunctions: PoolFunctions
 
       beforeEach('load fixture', async () => {
-        ;({ token0, token1, pool, poolFunctions, poolBalance0, poolBalance1, swapTarget } = await loadFixture(
-          poolCaseFixture
-        ))
+        ;({ token0, token1, pool, poolFunctions, poolBalance0, poolBalance1, swapTarget } = await loadFixture(poolCaseFixture))
       })
 
       afterEach('check can burn positions', async () => {
@@ -510,7 +508,7 @@ describe('UniswapV3Pool swap tests', () => {
           const tx = executeSwap(pool, testCase, poolFunctions)
           try {
             await tx
-          } catch (error) {
+          } catch (error: any) {
             expect({
               swapError: error.message,
               poolBalance0: poolBalance0.toString(),
@@ -528,36 +526,36 @@ describe('UniswapV3Pool swap tests', () => {
             feeGrowthGlobal0X128,
             feeGrowthGlobal1X128,
           ] = await Promise.all([
-            token0.balanceOf(pool.address),
-            token1.balanceOf(pool.address),
+            token0.balanceOf(await pool.getAddress()),
+            token1.balanceOf(await pool.getAddress()),
             pool.slot0(),
             pool.liquidity(),
             pool.feeGrowthGlobal0X128(),
             pool.feeGrowthGlobal1X128(),
           ])
-          const poolBalance0Delta = poolBalance0After.sub(poolBalance0)
-          const poolBalance1Delta = poolBalance1After.sub(poolBalance1)
+          const poolBalance0Delta = BigInt(poolBalance0After.toString()) - BigInt(poolBalance0.toString())
+          const poolBalance1Delta = BigInt(poolBalance1After.toString()) - BigInt(poolBalance1.toString())
 
           // check all the events were emitted corresponding to balance changes
-          if (poolBalance0Delta.eq(0)) await expect(tx).to.not.emit(token0, 'Transfer')
-          else if (poolBalance0Delta.lt(0))
+          if (poolBalance0Delta === 0n) await expect(tx).to.not.emit(token0, 'Transfer')
+          else if (poolBalance0Delta < 0n)
             await expect(tx)
               .to.emit(token0, 'Transfer')
-              .withArgs(pool.address, SWAP_RECIPIENT_ADDRESS, poolBalance0Delta.mul(-1))
-          else await expect(tx).to.emit(token0, 'Transfer').withArgs(wallet.address, pool.address, poolBalance0Delta)
+              .withArgs(await pool.getAddress(), SWAP_RECIPIENT_ADDRESS, poolBalance0Delta * -1n)
+          else await expect(tx).to.emit(token0, 'Transfer').withArgs(wallet.address, await pool.getAddress(), poolBalance0Delta)
 
-          if (poolBalance1Delta.eq(0)) await expect(tx).to.not.emit(token1, 'Transfer')
-          else if (poolBalance1Delta.lt(0))
+          if (poolBalance1Delta === 0n) await expect(tx).to.not.emit(token1, 'Transfer')
+          else if (poolBalance1Delta < 0n)
             await expect(tx)
               .to.emit(token1, 'Transfer')
-              .withArgs(pool.address, SWAP_RECIPIENT_ADDRESS, poolBalance1Delta.mul(-1))
-          else await expect(tx).to.emit(token1, 'Transfer').withArgs(wallet.address, pool.address, poolBalance1Delta)
+              .withArgs(await pool.getAddress(), SWAP_RECIPIENT_ADDRESS, poolBalance1Delta * -1n)
+          else await expect(tx).to.emit(token1, 'Transfer').withArgs(wallet.address, await pool.getAddress(), poolBalance1Delta)
 
           // check that the swap event was emitted too
           await expect(tx)
             .to.emit(pool, 'Swap')
             .withArgs(
-              swapTarget.address,
+              await swapTarget.getAddress(),
               SWAP_RECIPIENT_ADDRESS,
               poolBalance0Delta,
               poolBalance1Delta,

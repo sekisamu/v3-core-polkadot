@@ -1,11 +1,13 @@
-import { ethers, waffle } from 'hardhat'
-import { BigNumber, BigNumberish, constants, Wallet } from 'ethers'
-import { TestERC20 } from '../typechain/TestERC20'
-import { UniswapV3Factory } from '../typechain/UniswapV3Factory'
-import { MockTimeUniswapV3Pool } from '../typechain/MockTimeUniswapV3Pool'
-import { TestUniswapV3SwapPay } from '../typechain/TestUniswapV3SwapPay'
+import { ethers } from 'hardhat'
+import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers'
+
+import { TestERC20 } from '../typechain-types/test/TestERC20'
+import { UniswapV3Factory } from '../typechain-types/UniswapV3Factory'
+import { MockTimeUniswapV3Pool } from '../typechain-types/test/MockTimeUniswapV3Pool'
+import { TestUniswapV3SwapPay } from '../typechain-types/test/TestUniswapV3SwapPay'
 import checkObservationEquals from './shared/checkObservationEquals'
 import { expect } from './shared/expect'
+import { MaxUint256, ZeroAddress } from 'ethers'
 
 import { poolFixture, TEST_POOL_START_TIME } from './shared/fixtures'
 
@@ -27,17 +29,14 @@ import {
   MIN_SQRT_RATIO,
   SwapToPriceFunction,
 } from './shared/utilities'
-import { TestUniswapV3Callee } from '../typechain/TestUniswapV3Callee'
-import { TestUniswapV3ReentrantCallee } from '../typechain/TestUniswapV3ReentrantCallee'
-import { TickMathTest } from '../typechain/TickMathTest'
-import { SwapMathTest } from '../typechain/SwapMathTest'
-
-const createFixtureLoader = waffle.createFixtureLoader
-
-type ThenArg<T> = T extends PromiseLike<infer U> ? U : T
+import { TestUniswapV3Callee } from '../typechain-types/test/TestUniswapV3Callee'
+import { TestUniswapV3ReentrantCallee } from '../typechain-types/test/TestUniswapV3ReentrantCallee'
+import { TickMathTest } from '../typechain-types/test/TickMathTest'
+import { SwapMathTest } from '../typechain-types/test/SwapMathTest'
 
 describe('UniswapV3Pool', () => {
-  let wallet: Wallet, other: Wallet
+  let wallet: SignerWithAddress
+  let other: SignerWithAddress
 
   let token0: TestERC20
   let token1: TestERC20
@@ -64,16 +63,14 @@ describe('UniswapV3Pool', () => {
   let mint: MintFunction
   let flash: FlashFunction
 
-  let loadFixture: ReturnType<typeof createFixtureLoader>
-  let createPool: ThenArg<ReturnType<typeof poolFixture>>['createPool']
+  let createPool: Awaited<ReturnType<typeof poolFixture>>['createPool']
 
-  before('create fixture loader', async () => {
-    ;[wallet, other] = await (ethers as any).getSigners()
-    loadFixture = createFixtureLoader([wallet, other])
+  before('get signers', async () => {
+    [wallet, other] = await ethers.getSigners()
   })
 
   beforeEach('deploy fixture', async () => {
-    ;({ token0, token1, token2, factory, createPool, swapTargetCallee: swapTarget } = await loadFixture(poolFixture))
+    ;({ token0, token1, token2, factory, createPool, swapTargetCallee: swapTarget } = await poolFixture())
 
     const oldCreatePool = createPool
     createPool = async (_feeAmount, _tickSpacing) => {
@@ -105,35 +102,35 @@ describe('UniswapV3Pool', () => {
   })
 
   it('constructor initializes immutables', async () => {
-    expect(await pool.factory()).to.eq(factory.address)
-    expect(await pool.token0()).to.eq(token0.address)
-    expect(await pool.token1()).to.eq(token1.address)
+    expect(await pool.factory()).to.eq(await factory.getAddress())
+    expect(await pool.token0()).to.eq(await token0.getAddress())
+    expect(await pool.token1()).to.eq(await token1.getAddress())
     expect(await pool.maxLiquidityPerTick()).to.eq(getMaxLiquidityPerTick(tickSpacing))
   })
 
   describe('#initialize', () => {
     it('fails if already initialized', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
-      await expect(pool.initialize(encodePriceSqrt(1, 1))).to.be.reverted
+      await pool.initialize(encodePriceSqrt(1n, 1n))
+      await expect(pool.initialize(encodePriceSqrt(1n, 1n))).to.be.reverted
     })
     it('fails if starting price is too low', async () => {
       await expect(pool.initialize(1)).to.be.revertedWith('R')
-      await expect(pool.initialize(MIN_SQRT_RATIO.sub(1))).to.be.revertedWith('R')
+      await expect(pool.initialize(MIN_SQRT_RATIO - 1n)).to.be.revertedWith('R')
     })
     it('fails if starting price is too high', async () => {
       await expect(pool.initialize(MAX_SQRT_RATIO)).to.be.revertedWith('R')
-      await expect(pool.initialize(BigNumber.from(2).pow(160).sub(1))).to.be.revertedWith('R')
+      await expect(pool.initialize(2n ** 160n - 1n)).to.be.revertedWith('R')
     })
     it('can be initialized at MIN_SQRT_RATIO', async () => {
       await pool.initialize(MIN_SQRT_RATIO)
       expect((await pool.slot0()).tick).to.eq(getMinTick(1))
     })
     it('can be initialized at MAX_SQRT_RATIO - 1', async () => {
-      await pool.initialize(MAX_SQRT_RATIO.sub(1))
+      await pool.initialize(MAX_SQRT_RATIO - 1n)
       expect((await pool.slot0()).tick).to.eq(getMaxTick(1) - 1)
     })
     it('sets initial variables', async () => {
-      const price = encodePriceSqrt(1, 2)
+      const price = encodePriceSqrt(1n, 2n)
       await pool.initialize(price)
 
       const { sqrtPriceX96, observationIndex } = await pool.slot0()
@@ -142,16 +139,16 @@ describe('UniswapV3Pool', () => {
       expect((await pool.slot0()).tick).to.eq(-6932)
     })
     it('initializes the first observations slot', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
+      await pool.initialize(encodePriceSqrt(1n, 1n))
       checkObservationEquals(await pool.observations(0), {
-        secondsPerLiquidityCumulativeX128: 0,
+        secondsPerLiquidityCumulativeX128: 0n,
         initialized: true,
-        blockTimestamp: TEST_POOL_START_TIME,
-        tickCumulative: 0,
+        blockTimestamp: BigInt(TEST_POOL_START_TIME),
+        tickCumulative: 0n,
       })
     })
     it('emits a Initialized event with the input tick', async () => {
-      const sqrtPriceX96 = encodePriceSqrt(1, 2)
+      const sqrtPriceX96 = encodePriceSqrt(1n, 2n)
       await expect(pool.initialize(sqrtPriceX96)).to.emit(pool, 'Initialize').withArgs(sqrtPriceX96, -6932)
     })
   })
@@ -161,24 +158,24 @@ describe('UniswapV3Pool', () => {
       await expect(pool.increaseObservationCardinalityNext(2)).to.be.revertedWith('LOK')
     })
     it('emits an event including both old and new', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
+      await pool.initialize(encodePriceSqrt(1n, 1n))
       await expect(pool.increaseObservationCardinalityNext(2))
         .to.emit(pool, 'IncreaseObservationCardinalityNext')
         .withArgs(1, 2)
     })
     it('does not emit an event for no op call', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
+      await pool.initialize(encodePriceSqrt(1n, 1n))
       await pool.increaseObservationCardinalityNext(3)
       await expect(pool.increaseObservationCardinalityNext(2)).to.not.emit(pool, 'IncreaseObservationCardinalityNext')
     })
     it('does not change cardinality next if less than current', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
+      await pool.initialize(encodePriceSqrt(1n, 1n))
       await pool.increaseObservationCardinalityNext(3)
       await pool.increaseObservationCardinalityNext(2)
       expect((await pool.slot0()).observationCardinalityNext).to.eq(3)
     })
     it('increases cardinality and cardinality next first time', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
+      await pool.initialize(encodePriceSqrt(1n, 1n))
       await pool.increaseObservationCardinalityNext(2)
       const { observationCardinality, observationCardinalityNext } = await pool.slot0()
       expect(observationCardinality).to.eq(1)
@@ -192,7 +189,7 @@ describe('UniswapV3Pool', () => {
     })
     describe('after initialization', () => {
       beforeEach('initialize the pool at price of 10:1', async () => {
-        await pool.initialize(encodePriceSqrt(1, 10))
+        await pool.initialize(encodePriceSqrt(1n, 10n))
         await mint(wallet.address, minTick, maxTick, 3161)
       })
 
@@ -212,7 +209,7 @@ describe('UniswapV3Pool', () => {
         it('fails if amount exceeds the max', async () => {
           // these should fail with 'LO' but hardhat is bugged
           const maxLiquidityGross = await pool.maxLiquidityPerTick()
-          await expect(mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, maxLiquidityGross.add(1))).to
+          await expect(mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, maxLiquidityGross + 1n)).to
             .be.reverted
           await expect(mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, maxLiquidityGross)).to.not.be
             .reverted
@@ -223,15 +220,15 @@ describe('UniswapV3Pool', () => {
 
           const maxLiquidityGross = await pool.maxLiquidityPerTick()
           await expect(
-            mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, maxLiquidityGross.sub(1000).add(1))
+            mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, maxLiquidityGross - 1000n + 1n)
           ).to.be.reverted
           await expect(
-            mint(wallet.address, minTick + tickSpacing * 2, maxTick - tickSpacing, maxLiquidityGross.sub(1000).add(1))
+            mint(wallet.address, minTick + tickSpacing * 2, maxTick - tickSpacing, maxLiquidityGross - 1000n + 1n)
           ).to.be.reverted
           await expect(
-            mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing * 2, maxLiquidityGross.sub(1000).add(1))
+            mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing * 2, maxLiquidityGross - 1000n + 1n)
           ).to.be.reverted
-          await expect(mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, maxLiquidityGross.sub(1000)))
+          await expect(mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, maxLiquidityGross - 1000n))
             .to.not.be.reverted
         })
         it('fails if amount is 0', async () => {
@@ -241,8 +238,8 @@ describe('UniswapV3Pool', () => {
 
       describe('success cases', () => {
         it('initial balances', async () => {
-          expect(await token0.balanceOf(pool.address)).to.eq(9996)
-          expect(await token1.balanceOf(pool.address)).to.eq(1000)
+          expect(await token0.balanceOf(await pool.getAddress())).to.eq(9996)
+          expect(await token1.balanceOf(await pool.getAddress())).to.eq(1000)
         })
 
         it('initial tick', async () => {
@@ -253,30 +250,30 @@ describe('UniswapV3Pool', () => {
           it('transfers token0 only', async () => {
             await expect(mint(wallet.address, -22980, 0, 10000))
               .to.emit(token0, 'Transfer')
-              .withArgs(wallet.address, pool.address, 21549)
+              .withArgs(wallet.address, await pool.getAddress(), 21549)
               .to.not.emit(token1, 'Transfer')
-            expect(await token0.balanceOf(pool.address)).to.eq(9996 + 21549)
-            expect(await token1.balanceOf(pool.address)).to.eq(1000)
+            expect(await token0.balanceOf(await pool.getAddress())).to.eq(9996 + 21549)
+            expect(await token1.balanceOf(await pool.getAddress())).to.eq(1000)
           })
 
           it('max tick with max leverage', async () => {
-            await mint(wallet.address, maxTick - tickSpacing, maxTick, BigNumber.from(2).pow(102))
-            expect(await token0.balanceOf(pool.address)).to.eq(9996 + 828011525)
-            expect(await token1.balanceOf(pool.address)).to.eq(1000)
+            await mint(wallet.address, maxTick - tickSpacing, maxTick, 2n ** 102n)
+            expect(await token0.balanceOf(await pool.getAddress())).to.eq(9996 + 828011525)
+            expect(await token1.balanceOf(await pool.getAddress())).to.eq(1000)
           })
 
           it('works for max tick', async () => {
             await expect(mint(wallet.address, -22980, maxTick, 10000))
               .to.emit(token0, 'Transfer')
-              .withArgs(wallet.address, pool.address, 31549)
-            expect(await token0.balanceOf(pool.address)).to.eq(9996 + 31549)
-            expect(await token1.balanceOf(pool.address)).to.eq(1000)
+              .withArgs(wallet.address, await pool.getAddress(), 31549)
+            expect(await token0.balanceOf(await pool.getAddress())).to.eq(9996 + 31549)
+            expect(await token1.balanceOf(await pool.getAddress())).to.eq(1000)
           })
 
           it('removing works', async () => {
             await mint(wallet.address, -240, 0, 10000)
             await pool.burn(-240, 0, 10000)
-            const { amount0, amount1 } = await pool.callStatic.collect(wallet.address, -240, 0, MaxUint128, MaxUint128)
+            const { amount0, amount1 } = await pool.collect.staticCall(wallet.address, -240, 0, MaxUint128, MaxUint128)
             expect(amount0, 'amount0').to.eq(120)
             expect(amount1, 'amount1').to.eq(0)
           })
@@ -341,18 +338,18 @@ describe('UniswapV3Pool', () => {
 
           it('does not write an observation', async () => {
             checkObservationEquals(await pool.observations(0), {
-              tickCumulative: 0,
-              blockTimestamp: TEST_POOL_START_TIME,
+              tickCumulative: 0n,
+              blockTimestamp: BigInt(TEST_POOL_START_TIME),
               initialized: true,
-              secondsPerLiquidityCumulativeX128: 0,
+              secondsPerLiquidityCumulativeX128: 0n,
             })
             await pool.advanceTime(1)
             await mint(wallet.address, -240, 0, 100)
             checkObservationEquals(await pool.observations(0), {
-              tickCumulative: 0,
-              blockTimestamp: TEST_POOL_START_TIME,
+              tickCumulative: 0n,
+              blockTimestamp: BigInt(TEST_POOL_START_TIME),
               initialized: true,
-              secondsPerLiquidityCumulativeX128: 0,
+              secondsPerLiquidityCumulativeX128: 0n,
             })
           })
         })
@@ -361,11 +358,11 @@ describe('UniswapV3Pool', () => {
           it('price within range: transfers current price of both tokens', async () => {
             await expect(mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, 100))
               .to.emit(token0, 'Transfer')
-              .withArgs(wallet.address, pool.address, 317)
+              .withArgs(wallet.address, await pool.getAddress(), 317)
               .to.emit(token1, 'Transfer')
-              .withArgs(wallet.address, pool.address, 32)
-            expect(await token0.balanceOf(pool.address)).to.eq(9996 + 317)
-            expect(await token1.balanceOf(pool.address)).to.eq(1000 + 32)
+              .withArgs(wallet.address, await pool.getAddress(), 32)
+            expect(await token0.balanceOf(await pool.getAddress())).to.eq(9996 + 317)
+            expect(await token1.balanceOf(await pool.getAddress())).to.eq(1000 + 32)
           })
 
           it('initializes lower tick', async () => {
@@ -383,17 +380,17 @@ describe('UniswapV3Pool', () => {
           it('works for min/max tick', async () => {
             await expect(mint(wallet.address, minTick, maxTick, 10000))
               .to.emit(token0, 'Transfer')
-              .withArgs(wallet.address, pool.address, 31623)
+              .withArgs(wallet.address, await pool.getAddress(), 31623)
               .to.emit(token1, 'Transfer')
-              .withArgs(wallet.address, pool.address, 3163)
-            expect(await token0.balanceOf(pool.address)).to.eq(9996 + 31623)
-            expect(await token1.balanceOf(pool.address)).to.eq(1000 + 3163)
+              .withArgs(wallet.address, await pool.getAddress(), 3163)
+            expect(await token0.balanceOf(await pool.getAddress())).to.eq(9996 + 31623)
+            expect(await token1.balanceOf(await pool.getAddress())).to.eq(1000 + 3163)
           })
 
           it('removing works', async () => {
             await mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, 100)
             await pool.burn(minTick + tickSpacing, maxTick - tickSpacing, 100)
-            const { amount0, amount1 } = await pool.callStatic.collect(
+            const { amount0, amount1 } = await pool.collect.staticCall(
               wallet.address,
               minTick + tickSpacing,
               maxTick - tickSpacing,
@@ -406,18 +403,18 @@ describe('UniswapV3Pool', () => {
 
           it('writes an observation', async () => {
             checkObservationEquals(await pool.observations(0), {
-              tickCumulative: 0,
-              blockTimestamp: TEST_POOL_START_TIME,
+              tickCumulative: 0n,
+              blockTimestamp: BigInt(TEST_POOL_START_TIME),
               initialized: true,
-              secondsPerLiquidityCumulativeX128: 0,
+              secondsPerLiquidityCumulativeX128: 0n,
             })
             await pool.advanceTime(1)
             await mint(wallet.address, minTick, maxTick, 100)
             checkObservationEquals(await pool.observations(0), {
-              tickCumulative: -23028,
-              blockTimestamp: TEST_POOL_START_TIME + 1,
+              tickCumulative: -23028n,
+              blockTimestamp: BigInt(TEST_POOL_START_TIME + 1),
               initialized: true,
-              secondsPerLiquidityCumulativeX128: '107650226801941937191829992860413859',
+              secondsPerLiquidityCumulativeX128: 107650226801941937191829992860413859n,
             })
           })
         })
@@ -426,30 +423,30 @@ describe('UniswapV3Pool', () => {
           it('transfers token1 only', async () => {
             await expect(mint(wallet.address, -46080, -23040, 10000))
               .to.emit(token1, 'Transfer')
-              .withArgs(wallet.address, pool.address, 2162)
+              .withArgs(wallet.address, await pool.getAddress(), 2162)
               .to.not.emit(token0, 'Transfer')
-            expect(await token0.balanceOf(pool.address)).to.eq(9996)
-            expect(await token1.balanceOf(pool.address)).to.eq(1000 + 2162)
+            expect(await token0.balanceOf(await pool.getAddress())).to.eq(9996)
+            expect(await token1.balanceOf(await pool.getAddress())).to.eq(1000 + 2162)
           })
 
           it('min tick with max leverage', async () => {
-            await mint(wallet.address, minTick, minTick + tickSpacing, BigNumber.from(2).pow(102))
-            expect(await token0.balanceOf(pool.address)).to.eq(9996)
-            expect(await token1.balanceOf(pool.address)).to.eq(1000 + 828011520)
+            await mint(wallet.address, minTick, minTick + tickSpacing, 2n ** 102n)
+            expect(await token0.balanceOf(await pool.getAddress())).to.eq(9996)
+            expect(await token1.balanceOf(await pool.getAddress())).to.eq(1000 + 828011520)
           })
 
           it('works for min tick', async () => {
             await expect(mint(wallet.address, minTick, -23040, 10000))
               .to.emit(token1, 'Transfer')
-              .withArgs(wallet.address, pool.address, 3161)
-            expect(await token0.balanceOf(pool.address)).to.eq(9996)
-            expect(await token1.balanceOf(pool.address)).to.eq(1000 + 3161)
+              .withArgs(wallet.address, await pool.getAddress(), 3161)
+            expect(await token0.balanceOf(await pool.getAddress())).to.eq(9996)
+            expect(await token1.balanceOf(await pool.getAddress())).to.eq(1000 + 3161)
           })
 
           it('removing works', async () => {
             await mint(wallet.address, -46080, -46020, 10000)
             await pool.burn(-46080, -46020, 10000)
-            const { amount0, amount1 } = await pool.callStatic.collect(
+            const { amount0, amount1 } = await pool.collect.staticCall(
               wallet.address,
               -46080,
               -46020,
@@ -462,18 +459,18 @@ describe('UniswapV3Pool', () => {
 
           it('does not write an observation', async () => {
             checkObservationEquals(await pool.observations(0), {
-              tickCumulative: 0,
-              blockTimestamp: TEST_POOL_START_TIME,
+              tickCumulative: 0n,
+              blockTimestamp: BigInt(TEST_POOL_START_TIME),
               initialized: true,
-              secondsPerLiquidityCumulativeX128: 0,
+              secondsPerLiquidityCumulativeX128: 0n,
             })
             await pool.advanceTime(1)
             await mint(wallet.address, -46080, -23040, 100)
             checkObservationEquals(await pool.observations(0), {
-              tickCumulative: 0,
-              blockTimestamp: TEST_POOL_START_TIME,
+              tickCumulative: 0n,
+              blockTimestamp: BigInt(TEST_POOL_START_TIME),
               initialized: true,
-              secondsPerLiquidityCumulativeX128: 0,
+              secondsPerLiquidityCumulativeX128: 0n,
             })
           })
         })
@@ -482,9 +479,9 @@ describe('UniswapV3Pool', () => {
       it('protocol fees accumulate as expected during swap', async () => {
         await pool.setFeeProtocol(6, 6)
 
-        await mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, expandTo18Decimals(1))
-        await swapExact0For1(expandTo18Decimals(1).div(10), wallet.address)
-        await swapExact1For0(expandTo18Decimals(1).div(100), wallet.address)
+        await mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, expandTo18Decimals(1n))
+        await swapExact0For1(expandTo18Decimals(1n) / 10n, wallet.address)
+        await swapExact1For0(expandTo18Decimals(1n) / 100n, wallet.address)
 
         let { token0: token0ProtocolFees, token1: token1ProtocolFees } = await pool.protocolFees()
         expect(token0ProtocolFees).to.eq('50000000000000')
@@ -492,9 +489,9 @@ describe('UniswapV3Pool', () => {
       })
 
       it('positions are protected before protocol fee is turned on', async () => {
-        await mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, expandTo18Decimals(1))
-        await swapExact0For1(expandTo18Decimals(1).div(10), wallet.address)
-        await swapExact1For0(expandTo18Decimals(1).div(100), wallet.address)
+        await mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, expandTo18Decimals(1n))
+        await swapExact0For1(expandTo18Decimals(1n) / 10n, wallet.address)
+        await swapExact1For0(expandTo18Decimals(1n) / 100n, wallet.address)
 
         let { token0: token0ProtocolFees, token1: token1ProtocolFees } = await pool.protocolFees()
         expect(token0ProtocolFees).to.eq(0)
@@ -507,9 +504,9 @@ describe('UniswapV3Pool', () => {
       })
 
       it('poke is not allowed on uninitialized position', async () => {
-        await mint(other.address, minTick + tickSpacing, maxTick - tickSpacing, expandTo18Decimals(1))
-        await swapExact0For1(expandTo18Decimals(1).div(10), wallet.address)
-        await swapExact1For0(expandTo18Decimals(1).div(100), wallet.address)
+        await mint(other.address, minTick + tickSpacing, maxTick - tickSpacing, expandTo18Decimals(1n))
+        await swapExact0For1(expandTo18Decimals(1n) / 10n, wallet.address)
+        await swapExact1For0(expandTo18Decimals(1n) / 100n, wallet.address)
 
         // missing revert reason due to hardhat
         await expect(pool.burn(minTick + tickSpacing, maxTick - tickSpacing, 0)).to.be.reverted
@@ -564,10 +561,10 @@ describe('UniswapV3Pool', () => {
     it('does not clear the position fee growth snapshot if no more liquidity', async () => {
       // some activity that would make the ticks non-zero
       await pool.advanceTime(10)
-      await mint(other.address, minTick, maxTick, expandTo18Decimals(1))
-      await swapExact0For1(expandTo18Decimals(1), wallet.address)
-      await swapExact1For0(expandTo18Decimals(1), wallet.address)
-      await pool.connect(other).burn(minTick, maxTick, expandTo18Decimals(1))
+      await mint(other.address, minTick, maxTick, expandTo18Decimals(1n))
+      await swapExact0For1(expandTo18Decimals(1n), wallet.address)
+      await swapExact1For0(expandTo18Decimals(1n), wallet.address)
+      await pool.connect(other).burn(minTick, maxTick, expandTo18Decimals(1n))
       const {
         liquidity,
         tokensOwed0,
@@ -578,8 +575,8 @@ describe('UniswapV3Pool', () => {
       expect(liquidity).to.eq(0)
       expect(tokensOwed0).to.not.eq(0)
       expect(tokensOwed1).to.not.eq(0)
-      expect(feeGrowthInside0LastX128).to.eq('340282366920938463463374607431768211')
-      expect(feeGrowthInside1LastX128).to.eq('340282366920938576890830247744589365')
+      expect(feeGrowthInside0LastX128).to.eq(340282366920938463463374607431768211n)
+      expect(feeGrowthInside1LastX128).to.eq(340282366920938576890830247744589365n)
     })
 
     it('clears the tick if its the last position using it', async () => {
@@ -588,7 +585,7 @@ describe('UniswapV3Pool', () => {
       // some activity that would make the ticks non-zero
       await pool.advanceTime(10)
       await mint(wallet.address, tickLower, tickUpper, 1)
-      await swapExact0For1(expandTo18Decimals(1), wallet.address)
+      await swapExact0For1(expandTo18Decimals(1n), wallet.address)
       await pool.burn(tickLower, tickUpper, 1)
       await checkTickIsClear(tickLower)
       await checkTickIsClear(tickUpper)
@@ -601,7 +598,7 @@ describe('UniswapV3Pool', () => {
       await pool.advanceTime(10)
       await mint(wallet.address, tickLower, tickUpper, 1)
       await mint(wallet.address, tickLower + tickSpacing, tickUpper, 1)
-      await swapExact0For1(expandTo18Decimals(1), wallet.address)
+      await swapExact0For1(expandTo18Decimals(1n), wallet.address)
       await pool.burn(tickLower, tickUpper, 1)
       await checkTickIsClear(tickLower)
       await checkTickIsNotClear(tickUpper)
@@ -614,7 +611,7 @@ describe('UniswapV3Pool', () => {
       await pool.advanceTime(10)
       await mint(wallet.address, tickLower, tickUpper, 1)
       await mint(wallet.address, tickLower, tickUpper - tickSpacing, 1)
-      await swapExact0For1(expandTo18Decimals(1), wallet.address)
+      await swapExact0For1(expandTo18Decimals(1n), wallet.address)
       await pool.burn(tickLower, tickUpper, 1)
       await checkTickIsNotClear(tickLower)
       await checkTickIsClear(tickUpper)
@@ -622,11 +619,11 @@ describe('UniswapV3Pool', () => {
   })
 
   // the combined amount of liquidity that the pool is initialized with (including the 1 minimum liquidity that is burned)
-  const initializeLiquidityAmount = expandTo18Decimals(2)
+  const initializeLiquidityAmount = expandTo18Decimals(2n)
   async function initializeAtZeroTick(pool: MockTimeUniswapV3Pool): Promise<void> {
-    await pool.initialize(encodePriceSqrt(1, 1))
+    await pool.initialize(encodePriceSqrt(1n, 1n))
     const tickSpacing = await pool.tickSpacing()
-    const [min, max] = [getMinTick(tickSpacing), getMaxTick(tickSpacing)]
+    const [min, max] = [getMinTick(Number(tickSpacing)), getMaxTick(Number(tickSpacing))]
     await mint(wallet.address, min, max, initializeLiquidityAmount)
   }
 
@@ -648,7 +645,7 @@ describe('UniswapV3Pool', () => {
 
     it('current tick accumulator after single swap', async () => {
       // moves to tick -1
-      await swapExact0For1(1000, wallet.address)
+      await swapExact0For1(1000n, wallet.address)
       await pool.advanceTime(4)
       let {
         tickCumulatives: [tickCumulative],
@@ -657,10 +654,10 @@ describe('UniswapV3Pool', () => {
     })
 
     it('current tick accumulator after two swaps', async () => {
-      await swapExact0For1(expandTo18Decimals(1).div(2), wallet.address)
+      await swapExact0For1(expandTo18Decimals(1n) / 2n, wallet.address)
       expect((await pool.slot0()).tick).to.eq(-4452)
       await pool.advanceTime(4)
-      await swapExact1For0(expandTo18Decimals(1).div(4), wallet.address)
+      await swapExact1For0(expandTo18Decimals(1n) / 4n, wallet.address)
       expect((await pool.slot0()).tick).to.eq(-1558)
       await pool.advanceTime(6)
       let {
@@ -684,16 +681,16 @@ describe('UniswapV3Pool', () => {
 
       const liquidityBefore = await pool.liquidity()
 
-      const b0 = await token0.balanceOf(pool.address)
-      const b1 = await token1.balanceOf(pool.address)
+      const b0 = await token0.balanceOf(await pool.getAddress())
+      const b1 = await token1.balanceOf(await pool.getAddress())
 
       await mint(wallet.address, lowerTick, upperTick, liquidityDelta)
 
       const liquidityAfter = await pool.liquidity()
       expect(liquidityAfter).to.be.gte(liquidityBefore)
 
-      expect((await token0.balanceOf(pool.address)).sub(b0)).to.eq(1)
-      expect((await token1.balanceOf(pool.address)).sub(b1)).to.eq(0)
+      expect((await token0.balanceOf(await pool.getAddress())) - b0).to.eq(1n)
+      expect((await token1.balanceOf(await pool.getAddress())) - b1).to.eq(0n)
     })
 
     it('mint to the left of the current price', async () => {
@@ -703,16 +700,16 @@ describe('UniswapV3Pool', () => {
 
       const liquidityBefore = await pool.liquidity()
 
-      const b0 = await token0.balanceOf(pool.address)
-      const b1 = await token1.balanceOf(pool.address)
+      const b0 = await token0.balanceOf(await pool.getAddress())
+      const b1 = await token1.balanceOf(await pool.getAddress())
 
       await mint(wallet.address, lowerTick, upperTick, liquidityDelta)
 
       const liquidityAfter = await pool.liquidity()
       expect(liquidityAfter).to.be.gte(liquidityBefore)
 
-      expect((await token0.balanceOf(pool.address)).sub(b0)).to.eq(0)
-      expect((await token1.balanceOf(pool.address)).sub(b1)).to.eq(1)
+      expect((await token0.balanceOf(await pool.getAddress())) - b0).to.eq(0n)
+      expect((await token1.balanceOf(await pool.getAddress())) - b1).to.eq(1n)
     })
 
     it('mint within the current price', async () => {
@@ -722,28 +719,28 @@ describe('UniswapV3Pool', () => {
 
       const liquidityBefore = await pool.liquidity()
 
-      const b0 = await token0.balanceOf(pool.address)
-      const b1 = await token1.balanceOf(pool.address)
+      const b0 = await token0.balanceOf(await pool.getAddress())
+      const b1 = await token1.balanceOf(await pool.getAddress())
 
       await mint(wallet.address, lowerTick, upperTick, liquidityDelta)
 
       const liquidityAfter = await pool.liquidity()
       expect(liquidityAfter).to.be.gte(liquidityBefore)
 
-      expect((await token0.balanceOf(pool.address)).sub(b0)).to.eq(1)
-      expect((await token1.balanceOf(pool.address)).sub(b1)).to.eq(1)
+      expect((await token0.balanceOf(await pool.getAddress())) - b0).to.eq(1n)
+      expect((await token1.balanceOf(await pool.getAddress())) - b1).to.eq(1n)
     })
 
     it('cannot remove more than the entire position', async () => {
       const lowerTick = -tickSpacing
       const upperTick = tickSpacing
-      await mint(wallet.address, lowerTick, upperTick, expandTo18Decimals(1000))
+      await mint(wallet.address, lowerTick, upperTick, expandTo18Decimals(1000n))
       // should be 'LS', hardhat is bugged
-      await expect(pool.burn(lowerTick, upperTick, expandTo18Decimals(1001))).to.be.reverted
+      await expect(pool.burn(lowerTick, upperTick, expandTo18Decimals(1001n))).to.be.reverted
     })
 
     it('collect fees within the current price after swap', async () => {
-      const liquidityDelta = expandTo18Decimals(100)
+      const liquidityDelta = expandTo18Decimals(100n)
       const lowerTick = -tickSpacing * 100
       const upperTick = tickSpacing * 100
 
@@ -751,14 +748,14 @@ describe('UniswapV3Pool', () => {
 
       const liquidityBefore = await pool.liquidity()
 
-      const amount0In = expandTo18Decimals(1)
+      const amount0In = expandTo18Decimals(1n)
       await swapExact0For1(amount0In, wallet.address)
 
       const liquidityAfter = await pool.liquidity()
       expect(liquidityAfter, 'k increases').to.be.gte(liquidityBefore)
 
-      const token0BalanceBeforePool = await token0.balanceOf(pool.address)
-      const token1BalanceBeforePool = await token1.balanceOf(pool.address)
+      const token0BalanceBeforePool = await token0.balanceOf(await pool.getAddress())
+      const token1BalanceBeforePool = await token1.balanceOf(await pool.getAddress())
       const token0BalanceBeforeWallet = await token0.balanceOf(wallet.address)
       const token1BalanceBeforeWallet = await token1.balanceOf(wallet.address)
 
@@ -766,7 +763,7 @@ describe('UniswapV3Pool', () => {
       await pool.collect(wallet.address, lowerTick, upperTick, MaxUint128, MaxUint128)
 
       await pool.burn(lowerTick, upperTick, 0)
-      const { amount0: fees0, amount1: fees1 } = await pool.callStatic.collect(
+      const { amount0: fees0, amount1: fees1 } = await pool.collect.staticCall(
         wallet.address,
         lowerTick,
         upperTick,
@@ -778,8 +775,8 @@ describe('UniswapV3Pool', () => {
 
       const token0BalanceAfterWallet = await token0.balanceOf(wallet.address)
       const token1BalanceAfterWallet = await token1.balanceOf(wallet.address)
-      const token0BalanceAfterPool = await token0.balanceOf(pool.address)
-      const token1BalanceAfterPool = await token1.balanceOf(pool.address)
+      const token0BalanceAfterPool = await token0.balanceOf(await pool.getAddress())
+      const token1BalanceAfterPool = await token1.balanceOf(await pool.getAddress())
 
       expect(token0BalanceAfterWallet).to.be.gt(token0BalanceBeforeWallet)
       expect(token1BalanceAfterWallet).to.be.eq(token1BalanceBeforeWallet)
@@ -798,48 +795,48 @@ describe('UniswapV3Pool', () => {
         beforeEach(() => initializeAtZeroTick(pool))
 
         it('returns initial liquidity', async () => {
-          expect(await pool.liquidity()).to.eq(expandTo18Decimals(2))
+          expect(await pool.liquidity()).to.eq(expandTo18Decimals(2n))
         })
         it('returns in supply in range', async () => {
-          await mint(wallet.address, -tickSpacing, tickSpacing, expandTo18Decimals(3))
-          expect(await pool.liquidity()).to.eq(expandTo18Decimals(5))
+          await mint(wallet.address, -tickSpacing, tickSpacing, expandTo18Decimals(3n))
+          expect(await pool.liquidity()).to.eq(expandTo18Decimals(5n))
         })
         it('excludes supply at tick above current tick', async () => {
-          await mint(wallet.address, tickSpacing, tickSpacing * 2, expandTo18Decimals(3))
-          expect(await pool.liquidity()).to.eq(expandTo18Decimals(2))
+          await mint(wallet.address, tickSpacing, tickSpacing * 2, expandTo18Decimals(3n))
+          expect(await pool.liquidity()).to.eq(expandTo18Decimals(2n))
         })
         it('excludes supply at tick below current tick', async () => {
-          await mint(wallet.address, -tickSpacing * 2, -tickSpacing, expandTo18Decimals(3))
-          expect(await pool.liquidity()).to.eq(expandTo18Decimals(2))
+          await mint(wallet.address, -tickSpacing * 2, -tickSpacing, expandTo18Decimals(3n))
+          expect(await pool.liquidity()).to.eq(expandTo18Decimals(2n))
         })
         it('updates correctly when exiting range', async () => {
           const kBefore = await pool.liquidity()
-          expect(kBefore).to.be.eq(expandTo18Decimals(2))
+          expect(kBefore).to.be.eq(expandTo18Decimals(2n))
 
           // add liquidity at and above current tick
-          const liquidityDelta = expandTo18Decimals(1)
+          const liquidityDelta = expandTo18Decimals(1n)
           const lowerTick = 0
           const upperTick = tickSpacing
           await mint(wallet.address, lowerTick, upperTick, liquidityDelta)
 
           // ensure virtual supply has increased appropriately
           const kAfter = await pool.liquidity()
-          expect(kAfter).to.be.eq(expandTo18Decimals(3))
+          expect(kAfter).to.be.eq(expandTo18Decimals(3n))
 
           // swap toward the left (just enough for the tick transition function to trigger)
-          await swapExact0For1(1, wallet.address)
+          await swapExact0For1(1n, wallet.address)
           const { tick } = await pool.slot0()
           expect(tick).to.be.eq(-1)
 
           const kAfterSwap = await pool.liquidity()
-          expect(kAfterSwap).to.be.eq(expandTo18Decimals(2))
+          expect(kAfterSwap).to.be.eq(expandTo18Decimals(2n))
         })
         it('updates correctly when entering range', async () => {
           const kBefore = await pool.liquidity()
-          expect(kBefore).to.be.eq(expandTo18Decimals(2))
+          expect(kBefore).to.be.eq(expandTo18Decimals(2n))
 
           // add liquidity below the current tick
-          const liquidityDelta = expandTo18Decimals(1)
+          const liquidityDelta = expandTo18Decimals(1n)
           const lowerTick = -tickSpacing
           const upperTick = 0
           await mint(wallet.address, lowerTick, upperTick, liquidityDelta)
@@ -849,12 +846,12 @@ describe('UniswapV3Pool', () => {
           expect(kAfter).to.be.eq(kBefore)
 
           // swap toward the left (just enough for the tick transition function to trigger)
-          await swapExact0For1(1, wallet.address)
+          await swapExact0For1(1n, wallet.address)
           const { tick } = await pool.slot0()
           expect(tick).to.be.eq(-1)
 
           const kAfterSwap = await pool.liquidity()
-          expect(kAfterSwap).to.be.eq(expandTo18Decimals(3))
+          expect(kAfterSwap).to.be.eq(expandTo18Decimals(3n))
         })
       })
     })
@@ -864,72 +861,72 @@ describe('UniswapV3Pool', () => {
     beforeEach('initialize at tick 0', () => initializeAtZeroTick(pool))
 
     it('limit selling 0 for 1 at tick 0 thru 1', async () => {
-      await expect(mint(wallet.address, 0, 120, expandTo18Decimals(1)))
+      await expect(mint(wallet.address, 0, 120, expandTo18Decimals(1n)))
         .to.emit(token0, 'Transfer')
-        .withArgs(wallet.address, pool.address, '5981737760509663')
+        .withArgs(wallet.address, await pool.getAddress(), '5981737760509663')
       // somebody takes the limit order
-      await swapExact1For0(expandTo18Decimals(2), other.address)
-      await expect(pool.burn(0, 120, expandTo18Decimals(1)))
+      await swapExact1For0(expandTo18Decimals(2n), other.address)
+      await expect(pool.burn(0, 120, expandTo18Decimals(1n)))
         .to.emit(pool, 'Burn')
-        .withArgs(wallet.address, 0, 120, expandTo18Decimals(1), 0, '6017734268818165')
+        .withArgs(wallet.address, 0, 120, expandTo18Decimals(1n), 0, '6017734268818165')
         .to.not.emit(token0, 'Transfer')
         .to.not.emit(token1, 'Transfer')
       await expect(pool.collect(wallet.address, 0, 120, MaxUint128, MaxUint128))
         .to.emit(token1, 'Transfer')
-        .withArgs(pool.address, wallet.address, BigNumber.from('6017734268818165').add('18107525382602')) // roughly 0.3% despite other liquidity
+        .withArgs(await pool.getAddress(), wallet.address, 6017734268818165n + 18107525382602n) // roughly 0.3% despite other liquidity
         .to.not.emit(token0, 'Transfer')
       expect((await pool.slot0()).tick).to.be.gte(120)
     })
     it('limit selling 1 for 0 at tick 0 thru -1', async () => {
-      await expect(mint(wallet.address, -120, 0, expandTo18Decimals(1)))
+      await expect(mint(wallet.address, -120, 0, expandTo18Decimals(1n)))
         .to.emit(token1, 'Transfer')
-        .withArgs(wallet.address, pool.address, '5981737760509663')
+        .withArgs(wallet.address, await pool.getAddress(), '5981737760509663')
       // somebody takes the limit order
-      await swapExact0For1(expandTo18Decimals(2), other.address)
-      await expect(pool.burn(-120, 0, expandTo18Decimals(1)))
+      await swapExact0For1(expandTo18Decimals(2n), other.address)
+      await expect(pool.burn(-120, 0, expandTo18Decimals(1n)))
         .to.emit(pool, 'Burn')
-        .withArgs(wallet.address, -120, 0, expandTo18Decimals(1), '6017734268818165', 0)
+        .withArgs(wallet.address, -120, 0, expandTo18Decimals(1n), '6017734268818165', 0)
         .to.not.emit(token0, 'Transfer')
         .to.not.emit(token1, 'Transfer')
       await expect(pool.collect(wallet.address, -120, 0, MaxUint128, MaxUint128))
         .to.emit(token0, 'Transfer')
-        .withArgs(pool.address, wallet.address, BigNumber.from('6017734268818165').add('18107525382602')) // roughly 0.3% despite other liquidity
+        .withArgs(await pool.getAddress(), wallet.address, 6017734268818165n + 18107525382602n) // roughly 0.3% despite other liquidity
       expect((await pool.slot0()).tick).to.be.lt(-120)
     })
 
     describe('fee is on', () => {
       beforeEach(() => pool.setFeeProtocol(6, 6))
       it('limit selling 0 for 1 at tick 0 thru 1', async () => {
-        await expect(mint(wallet.address, 0, 120, expandTo18Decimals(1)))
+        await expect(mint(wallet.address, 0, 120, expandTo18Decimals(1n)))
           .to.emit(token0, 'Transfer')
-          .withArgs(wallet.address, pool.address, '5981737760509663')
+          .withArgs(wallet.address, await pool.getAddress(), '5981737760509663')
         // somebody takes the limit order
-        await swapExact1For0(expandTo18Decimals(2), other.address)
-        await expect(pool.burn(0, 120, expandTo18Decimals(1)))
+        await swapExact1For0(expandTo18Decimals(2n), other.address)
+        await expect(pool.burn(0, 120, expandTo18Decimals(1n)))
           .to.emit(pool, 'Burn')
-          .withArgs(wallet.address, 0, 120, expandTo18Decimals(1), 0, '6017734268818165')
+          .withArgs(wallet.address, 0, 120, expandTo18Decimals(1n), 0, '6017734268818165')
           .to.not.emit(token0, 'Transfer')
           .to.not.emit(token1, 'Transfer')
         await expect(pool.collect(wallet.address, 0, 120, MaxUint128, MaxUint128))
           .to.emit(token1, 'Transfer')
-          .withArgs(pool.address, wallet.address, BigNumber.from('6017734268818165').add('15089604485501')) // roughly 0.25% despite other liquidity
+          .withArgs(await pool.getAddress(), wallet.address, 6017734268818165n + 15089604485501n) // roughly 0.25% despite other liquidity
           .to.not.emit(token0, 'Transfer')
         expect((await pool.slot0()).tick).to.be.gte(120)
       })
       it('limit selling 1 for 0 at tick 0 thru -1', async () => {
-        await expect(mint(wallet.address, -120, 0, expandTo18Decimals(1)))
+        await expect(mint(wallet.address, -120, 0, expandTo18Decimals(1n)))
           .to.emit(token1, 'Transfer')
-          .withArgs(wallet.address, pool.address, '5981737760509663')
+          .withArgs(wallet.address, await pool.getAddress(), '5981737760509663')
         // somebody takes the limit order
-        await swapExact0For1(expandTo18Decimals(2), other.address)
-        await expect(pool.burn(-120, 0, expandTo18Decimals(1)))
+        await swapExact0For1(expandTo18Decimals(2n), other.address)
+        await expect(pool.burn(-120, 0, expandTo18Decimals(1n)))
           .to.emit(pool, 'Burn')
-          .withArgs(wallet.address, -120, 0, expandTo18Decimals(1), '6017734268818165', 0)
+          .withArgs(wallet.address, -120, 0, expandTo18Decimals(1n), '6017734268818165', 0)
           .to.not.emit(token0, 'Transfer')
           .to.not.emit(token1, 'Transfer')
         await expect(pool.collect(wallet.address, -120, 0, MaxUint128, MaxUint128))
           .to.emit(token0, 'Transfer')
-          .withArgs(pool.address, wallet.address, BigNumber.from('6017734268818165').add('15089604485501')) // roughly 0.25% despite other liquidity
+          .withArgs(await pool.getAddress(), wallet.address, 6017734268818165n + 15089604485501n) // roughly 0.25% despite other liquidity
         expect((await pool.slot0()).tick).to.be.lt(-120)
       })
     })
@@ -938,14 +935,14 @@ describe('UniswapV3Pool', () => {
   describe('#collect', () => {
     beforeEach(async () => {
       pool = await createPool(FeeAmount.LOW, TICK_SPACINGS[FeeAmount.LOW])
-      await pool.initialize(encodePriceSqrt(1, 1))
+      await pool.initialize(encodePriceSqrt(1n, 1n))
     })
 
     it('works with multiple LPs', async () => {
-      await mint(wallet.address, minTick, maxTick, expandTo18Decimals(1))
-      await mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, expandTo18Decimals(2))
+      await mint(wallet.address, minTick, maxTick, expandTo18Decimals(1n))
+      await mint(wallet.address, minTick + tickSpacing, maxTick - tickSpacing, expandTo18Decimals(2n))
 
-      await swapExact0For1(expandTo18Decimals(1), wallet.address)
+      await swapExact0For1(expandTo18Decimals(1n), wallet.address)
 
       // poke positions
       await pool.burn(minTick, maxTick, 0)
@@ -964,12 +961,12 @@ describe('UniswapV3Pool', () => {
 
     describe('works across large increases', () => {
       beforeEach(async () => {
-        await mint(wallet.address, minTick, maxTick, expandTo18Decimals(1))
+        await mint(wallet.address, minTick, maxTick, expandTo18Decimals(1n))
       })
 
       // type(uint128).max * 2**128 / 1e18
       // https://www.wolframalpha.com/input/?i=%282**128+-+1%29+*+2**128+%2F+1e18
-      const magicNumber = BigNumber.from('115792089237316195423570985008687907852929702298719625575994')
+      const magicNumber = 115792089237316195423570985008687907852929702298719625575994n
 
       it('works just before the cap binds', async () => {
         await pool.setFeeGrowthGlobal0X128(magicNumber)
@@ -977,12 +974,12 @@ describe('UniswapV3Pool', () => {
 
         const { tokensOwed0, tokensOwed1 } = await pool.positions(getPositionKey(wallet.address, minTick, maxTick))
 
-        expect(tokensOwed0).to.be.eq(MaxUint128.sub(1))
+        expect(tokensOwed0).to.be.eq(MaxUint128 - 1n)
         expect(tokensOwed1).to.be.eq(0)
       })
 
       it('works just after the cap binds', async () => {
-        await pool.setFeeGrowthGlobal0X128(magicNumber.add(1))
+        await pool.setFeeGrowthGlobal0X128(magicNumber + 1n)
         await pool.burn(minTick, maxTick, 0)
 
         const { tokensOwed0, tokensOwed1 } = await pool.positions(getPositionKey(wallet.address, minTick, maxTick))
@@ -992,7 +989,7 @@ describe('UniswapV3Pool', () => {
       })
 
       it('works well after the cap binds', async () => {
-        await pool.setFeeGrowthGlobal0X128(constants.MaxUint256)
+        await pool.setFeeGrowthGlobal0X128(MaxUint256)
         await pool.burn(minTick, maxTick, 0)
 
         const { tokensOwed0, tokensOwed1 } = await pool.positions(getPositionKey(wallet.address, minTick, maxTick))
@@ -1004,15 +1001,15 @@ describe('UniswapV3Pool', () => {
 
     describe('works across overflow boundaries', () => {
       beforeEach(async () => {
-        await pool.setFeeGrowthGlobal0X128(constants.MaxUint256)
-        await pool.setFeeGrowthGlobal1X128(constants.MaxUint256)
-        await mint(wallet.address, minTick, maxTick, expandTo18Decimals(10))
+        await pool.setFeeGrowthGlobal0X128(MaxUint256)
+        await pool.setFeeGrowthGlobal1X128(MaxUint256)
+        await mint(wallet.address, minTick, maxTick, expandTo18Decimals(10n))
       })
 
       it('token0', async () => {
-        await swapExact0For1(expandTo18Decimals(1), wallet.address)
+        await swapExact0For1(expandTo18Decimals(1n), wallet.address)
         await pool.burn(minTick, maxTick, 0)
-        const { amount0, amount1 } = await pool.callStatic.collect(
+        const { amount0, amount1 } = await pool.collect.staticCall(
           wallet.address,
           minTick,
           maxTick,
@@ -1023,9 +1020,9 @@ describe('UniswapV3Pool', () => {
         expect(amount1).to.be.eq(0)
       })
       it('token1', async () => {
-        await swapExact1For0(expandTo18Decimals(1), wallet.address)
+        await swapExact1For0(expandTo18Decimals(1n), wallet.address)
         await pool.burn(minTick, maxTick, 0)
-        const { amount0, amount1 } = await pool.callStatic.collect(
+        const { amount0, amount1 } = await pool.collect.staticCall(
           wallet.address,
           minTick,
           maxTick,
@@ -1036,10 +1033,10 @@ describe('UniswapV3Pool', () => {
         expect(amount1).to.be.eq('499999999999999')
       })
       it('token0 and token1', async () => {
-        await swapExact0For1(expandTo18Decimals(1), wallet.address)
-        await swapExact1For0(expandTo18Decimals(1), wallet.address)
+        await swapExact0For1(expandTo18Decimals(1n), wallet.address)
+        await swapExact1For0(expandTo18Decimals(1n), wallet.address)
         await pool.burn(minTick, maxTick, 0)
-        const { amount0, amount1 } = await pool.callStatic.collect(
+        const { amount0, amount1 } = await pool.collect.staticCall(
           wallet.address,
           minTick,
           maxTick,
@@ -1053,11 +1050,11 @@ describe('UniswapV3Pool', () => {
   })
 
   describe('#feeProtocol', () => {
-    const liquidityAmount = expandTo18Decimals(1000)
+    const liquidityAmount = expandTo18Decimals(1000n)
 
     beforeEach(async () => {
       pool = await createPool(FeeAmount.LOW, TICK_SPACINGS[FeeAmount.LOW])
-      await pool.initialize(encodePriceSqrt(1, 1))
+      await pool.initialize(encodePriceSqrt(1n, 1n))
       await mint(wallet.address, minTick, maxTick, liquidityAmount)
     })
 
@@ -1084,7 +1081,7 @@ describe('UniswapV3Pool', () => {
       zeroForOne,
       poke,
     }: {
-      amount: BigNumberish
+      amount: bigint
       zeroForOne: boolean
       poke: boolean
     }) {
@@ -1092,7 +1089,7 @@ describe('UniswapV3Pool', () => {
 
       if (poke) await pool.burn(minTick, maxTick, 0)
 
-      const { amount0: fees0, amount1: fees1 } = await pool.callStatic.collect(
+      const { amount0: fees0, amount1: fees1 } = await pool.collect.staticCall(
         wallet.address,
         minTick,
         maxTick,
@@ -1108,7 +1105,7 @@ describe('UniswapV3Pool', () => {
 
     it('position owner gets full fees when protocol fee is off', async () => {
       const { token0Fees, token1Fees } = await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: true,
         poke: true,
       })
@@ -1122,21 +1119,21 @@ describe('UniswapV3Pool', () => {
       let token0Fees
       let token1Fees
       ;({ token0Fees, token1Fees } = await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: true,
         poke: true,
       }))
       expect(token0Fees).to.eq('499999999999999')
       expect(token1Fees).to.eq(0)
       ;({ token0Fees, token1Fees } = await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: true,
         poke: true,
       }))
       expect(token0Fees).to.eq('999999999999998')
       expect(token1Fees).to.eq(0)
       ;({ token0Fees, token1Fees } = await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: true,
         poke: true,
       }))
@@ -1148,21 +1145,21 @@ describe('UniswapV3Pool', () => {
       let token0Fees
       let token1Fees
       ;({ token0Fees, token1Fees } = await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: false,
         poke: true,
       }))
       expect(token0Fees).to.eq(0)
       expect(token1Fees).to.eq('499999999999999')
       ;({ token0Fees, token1Fees } = await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: false,
         poke: true,
       }))
       expect(token0Fees).to.eq(0)
       expect(token1Fees).to.eq('999999999999998')
       ;({ token0Fees, token1Fees } = await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: false,
         poke: true,
       }))
@@ -1174,7 +1171,7 @@ describe('UniswapV3Pool', () => {
       await pool.setFeeProtocol(6, 6)
 
       const { token0Fees, token1Fees } = await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: true,
         poke: true,
       })
@@ -1186,7 +1183,7 @@ describe('UniswapV3Pool', () => {
     describe('#collectProtocol', () => {
       it('returns 0 if no fees', async () => {
         await pool.setFeeProtocol(6, 6)
-        const { amount0, amount1 } = await pool.callStatic.collectProtocol(wallet.address, MaxUint128, MaxUint128)
+        const { amount0, amount1 } = await pool.collectProtocol.staticCall(wallet.address, MaxUint128, MaxUint128)
         expect(amount0).to.be.eq(0)
         expect(amount1).to.be.eq(0)
       })
@@ -1195,26 +1192,26 @@ describe('UniswapV3Pool', () => {
         await pool.setFeeProtocol(6, 6)
 
         await swapAndGetFeesOwed({
-          amount: expandTo18Decimals(1),
+          amount: expandTo18Decimals(1n),
           zeroForOne: true,
           poke: true,
         })
 
         await expect(pool.collectProtocol(other.address, MaxUint128, MaxUint128))
           .to.emit(token0, 'Transfer')
-          .withArgs(pool.address, other.address, '83333333333332')
+          .withArgs(await pool.getAddress(), other.address, '83333333333332')
       })
 
       it('fees collected can differ between token0 and token1', async () => {
         await pool.setFeeProtocol(8, 5)
 
         await swapAndGetFeesOwed({
-          amount: expandTo18Decimals(1),
+          amount: expandTo18Decimals(1n),
           zeroForOne: true,
           poke: false,
         })
         await swapAndGetFeesOwed({
-          amount: expandTo18Decimals(1),
+          amount: expandTo18Decimals(1n),
           zeroForOne: false,
           poke: false,
         })
@@ -1222,21 +1219,21 @@ describe('UniswapV3Pool', () => {
         await expect(pool.collectProtocol(other.address, MaxUint128, MaxUint128))
           .to.emit(token0, 'Transfer')
           // more token0 fees because it's 1/5th the swap fees
-          .withArgs(pool.address, other.address, '62499999999999')
+          .withArgs(await pool.getAddress(), other.address, '62499999999999')
           .to.emit(token1, 'Transfer')
           // less token1 fees because it's 1/8th the swap fees
-          .withArgs(pool.address, other.address, '99999999999998')
+          .withArgs(await pool.getAddress(), other.address, '99999999999998')
       })
     })
 
     it('fees collected by lp after two swaps should be double one swap', async () => {
       await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: true,
         poke: true,
       })
       const { token0Fees, token1Fees } = await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: true,
         poke: true,
       })
@@ -1248,7 +1245,7 @@ describe('UniswapV3Pool', () => {
 
     it('fees collected after two swaps with fee turned on in middle are fees from last swap (not confiscatory)', async () => {
       await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: true,
         poke: false,
       })
@@ -1256,7 +1253,7 @@ describe('UniswapV3Pool', () => {
       await pool.setFeeProtocol(6, 6)
 
       const { token0Fees, token1Fees } = await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: true,
         poke: true,
       })
@@ -1269,7 +1266,7 @@ describe('UniswapV3Pool', () => {
       await pool.setFeeProtocol(6, 6)
 
       const { token0Fees, token1Fees } = await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: true,
         poke: true,
       })
@@ -1281,7 +1278,7 @@ describe('UniswapV3Pool', () => {
       await pool.collect(wallet.address, minTick, maxTick, MaxUint128, MaxUint128)
 
       const { token0Fees: token0FeesNext, token1Fees: token1FeesNext } = await swapAndGetFeesOwed({
-        amount: expandTo18Decimals(1),
+        amount: expandTo18Decimals(1n),
         zeroForOne: true,
         poke: false,
       })
@@ -1296,7 +1293,7 @@ describe('UniswapV3Pool', () => {
       await pool.burn(minTick, maxTick, 0) // poke to update fees
       await expect(pool.collect(wallet.address, minTick, maxTick, MaxUint128, MaxUint128))
         .to.emit(token0, 'Transfer')
-        .withArgs(pool.address, wallet.address, '416666666666666')
+        .withArgs(await pool.getAddress(), wallet.address, '416666666666666')
       ;({ token0: token0ProtocolFees, token1: token1ProtocolFees } = await pool.protocolFees())
       expect(token0ProtocolFees).to.eq('166666666666666')
       expect(token1ProtocolFees).to.eq(0)
@@ -1310,7 +1307,7 @@ describe('UniswapV3Pool', () => {
       })
       describe('post initialize', () => {
         beforeEach('initialize pool', async () => {
-          await pool.initialize(encodePriceSqrt(1, 1))
+          await pool.initialize(encodePriceSqrt(1n, 1n))
         })
         it('mint can only be called for multiples of 12', async () => {
           await expect(mint(wallet.address, -6, 0, 1)).to.be.reverted
@@ -1321,9 +1318,9 @@ describe('UniswapV3Pool', () => {
           await mint(wallet.address, -144, -120, 1)
         })
         it('swapping across gaps works in 1 for 0 direction', async () => {
-          const liquidityAmount = expandTo18Decimals(1).div(4)
+          const liquidityAmount = expandTo18Decimals(1n) / 4n
           await mint(wallet.address, 120000, 121200, liquidityAmount)
-          await swapExact1For0(expandTo18Decimals(1), wallet.address)
+          await swapExact1For0(expandTo18Decimals(1n), wallet.address)
           await expect(pool.burn(120000, 121200, liquidityAmount))
             .to.emit(pool, 'Burn')
             .withArgs(wallet.address, 120000, 121200, liquidityAmount, '30027458295511', '996999999999999999')
@@ -1332,9 +1329,9 @@ describe('UniswapV3Pool', () => {
           expect((await pool.slot0()).tick).to.eq(120196)
         })
         it('swapping across gaps works in 0 for 1 direction', async () => {
-          const liquidityAmount = expandTo18Decimals(1).div(4)
+          const liquidityAmount = expandTo18Decimals(1n) / 4n
           await mint(wallet.address, -121200, -120000, liquidityAmount)
-          await swapExact0For1(expandTo18Decimals(1), wallet.address)
+          await swapExact0For1(expandTo18Decimals(1n), wallet.address)
           await expect(pool.burn(-121200, -120000, liquidityAmount))
             .to.emit(pool, 'Burn')
             .withArgs(wallet.address, -121200, -120000, liquidityAmount, '996999999999999999', '30027458295511')
@@ -1351,7 +1348,7 @@ describe('UniswapV3Pool', () => {
     pool = await createPool(FeeAmount.MEDIUM, 1)
     const sqrtTickMath = (await (await ethers.getContractFactory('TickMathTest')).deploy()) as TickMathTest
     const swapMath = (await (await ethers.getContractFactory('SwapMathTest')).deploy()) as SwapMathTest
-    const p0 = (await sqrtTickMath.getSqrtRatioAtTick(-24081)).add(1)
+    const p0 = (await sqrtTickMath.getSqrtRatioAtTick(-24081)) + 1n
     // initialize at a price of ~0.3 token1/token0
     // meaning if you swap in 2 token0, you should end up getting 0 token1
     await pool.initialize(p0)
@@ -1359,7 +1356,7 @@ describe('UniswapV3Pool', () => {
     expect((await pool.slot0()).tick, 'pool tick is -24081').to.eq(-24081)
 
     // add a bunch of liquidity around current price
-    const liquidity = expandTo18Decimals(1000)
+    const liquidity = expandTo18Decimals(1000n)
     await mint(wallet.address, -24082, -24080, liquidity)
     expect(await pool.liquidity(), 'current pool liquidity is now liquidity + 1').to.eq(liquidity)
 
@@ -1370,12 +1367,12 @@ describe('UniswapV3Pool', () => {
     {
       const { feeAmount, amountIn, amountOut, sqrtQ } = await swapMath.computeSwapStep(
         p0,
-        p0.sub(1),
+        p0 - 1n,
         liquidity,
         3,
         FeeAmount.MEDIUM
       )
-      expect(sqrtQ, 'price moves').to.eq(p0.sub(1))
+      expect(sqrtQ, 'price moves').to.eq(p0 - 1n)
       expect(feeAmount, 'fee amount is 1').to.eq(1)
       expect(amountIn, 'amount in is 1').to.eq(1)
       expect(amountOut, 'zero amount out').to.eq(0)
@@ -1384,14 +1381,14 @@ describe('UniswapV3Pool', () => {
     // swap 2 amount in, should get 0 amount out
     await expect(swapExact0For1(3, wallet.address))
       .to.emit(token0, 'Transfer')
-      .withArgs(wallet.address, pool.address, 3)
+      .withArgs(wallet.address, await pool.getAddress(), 3)
       .to.not.emit(token1, 'Transfer')
 
     const { tick, sqrtPriceX96 } = await pool.slot0()
 
     expect(tick, 'pool is at the next tick').to.eq(-24082)
-    expect(sqrtPriceX96, 'pool price is still on the p0 boundary').to.eq(p0.sub(1))
-    expect(await pool.liquidity(), 'pool has run tick transition and liquidity changed').to.eq(liquidity.mul(2))
+    expect(sqrtPriceX96, 'pool price is still on the p0 boundary').to.eq(p0 - 1n)
+    expect(await pool.liquidity(), 'pool has run tick transition and liquidity changed').to.eq(liquidity * 2n)
   })
 
   describe('#flash', () => {
@@ -1401,61 +1398,61 @@ describe('UniswapV3Pool', () => {
       await expect(flash(0, 200, other.address)).to.be.reverted
     })
     it('fails if no liquidity', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
+      await pool.initialize(encodePriceSqrt(1n, 1n))
       await expect(flash(100, 200, other.address)).to.be.revertedWith('L')
       await expect(flash(100, 0, other.address)).to.be.revertedWith('L')
       await expect(flash(0, 200, other.address)).to.be.revertedWith('L')
     })
     describe('after liquidity added', () => {
-      let balance0: BigNumber
-      let balance1: BigNumber
+      let balance0: bigint
+      let balance1: bigint
       beforeEach('add some tokens', async () => {
         await initializeAtZeroTick(pool)
-        ;[balance0, balance1] = await Promise.all([token0.balanceOf(pool.address), token1.balanceOf(pool.address)])
+        ;[balance0, balance1] = await Promise.all([token0.balanceOf(await pool.getAddress()), token1.balanceOf(await pool.getAddress())])
       })
 
       describe('fee off', () => {
         it('emits an event', async () => {
           await expect(flash(1001, 2001, other.address))
             .to.emit(pool, 'Flash')
-            .withArgs(swapTarget.address, other.address, 1001, 2001, 4, 7)
+            .withArgs(await swapTarget.getAddress(), other.address, 1001, 2001, 4, 7)
         })
 
         it('transfers the amount0 to the recipient', async () => {
           await expect(flash(100, 200, other.address))
             .to.emit(token0, 'Transfer')
-            .withArgs(pool.address, other.address, 100)
+            .withArgs(await pool.getAddress(), other.address, 100)
         })
         it('transfers the amount1 to the recipient', async () => {
           await expect(flash(100, 200, other.address))
             .to.emit(token1, 'Transfer')
-            .withArgs(pool.address, other.address, 200)
+            .withArgs(await pool.getAddress(), other.address, 200)
         })
         it('can flash only token0', async () => {
           await expect(flash(101, 0, other.address))
             .to.emit(token0, 'Transfer')
-            .withArgs(pool.address, other.address, 101)
+            .withArgs(await pool.getAddress(), other.address, 101)
             .to.not.emit(token1, 'Transfer')
         })
         it('can flash only token1', async () => {
           await expect(flash(0, 102, other.address))
             .to.emit(token1, 'Transfer')
-            .withArgs(pool.address, other.address, 102)
+            .withArgs(await pool.getAddress(), other.address, 102)
             .to.not.emit(token0, 'Transfer')
         })
         it('can flash entire token balance', async () => {
           await expect(flash(balance0, balance1, other.address))
             .to.emit(token0, 'Transfer')
-            .withArgs(pool.address, other.address, balance0)
+            .withArgs(await pool.getAddress(), other.address, balance0)
             .to.emit(token1, 'Transfer')
-            .withArgs(pool.address, other.address, balance1)
+            .withArgs(await pool.getAddress(), other.address, balance1)
         })
         it('no-op if both amounts are 0', async () => {
           await expect(flash(0, 0, other.address)).to.not.emit(token0, 'Transfer').to.not.emit(token1, 'Transfer')
         })
         it('fails if flash amount is greater than token balance', async () => {
-          await expect(flash(balance0.add(1), balance1, other.address)).to.be.reverted
-          await expect(flash(balance0, balance1.add(1), other.address)).to.be.reverted
+          await expect(flash(balance0 + 1n, balance1, other.address)).to.be.reverted
+          await expect(flash(balance0, balance1 + 1n, other.address)).to.be.reverted
         })
         it('calls the flash callback on the sender with correct fee amounts', async () => {
           await expect(flash(1001, 2002, other.address)).to.emit(swapTarget, 'FlashCallback').withArgs(4, 7)
@@ -1463,10 +1460,10 @@ describe('UniswapV3Pool', () => {
         it('increases the fee growth by the expected amount', async () => {
           await flash(1001, 2002, other.address)
           expect(await pool.feeGrowthGlobal0X128()).to.eq(
-            BigNumber.from(4).mul(BigNumber.from(2).pow(128)).div(expandTo18Decimals(2))
+            (4n * (2n ** 128n)) / expandTo18Decimals(2n)
           )
           expect(await pool.feeGrowthGlobal1X128()).to.eq(
-            BigNumber.from(7).mul(BigNumber.from(2).pow(128)).div(expandTo18Decimals(2))
+            (7n * (2n ** 128n)) / expandTo18Decimals(2n)
           )
         })
         it('fails if original balance not returned in either token', async () => {
@@ -1478,35 +1475,35 @@ describe('UniswapV3Pool', () => {
           await expect(flash(0, 1000, other.address, 0, 1002)).to.be.reverted
         })
         it('allows donating token0', async () => {
-          await expect(flash(0, 0, constants.AddressZero, 567, 0))
+          await expect(flash(0, 0, ZeroAddress, 567, 0))
             .to.emit(token0, 'Transfer')
-            .withArgs(wallet.address, pool.address, 567)
+            .withArgs(wallet.address, await pool.getAddress(), 567)
             .to.not.emit(token1, 'Transfer')
           expect(await pool.feeGrowthGlobal0X128()).to.eq(
-            BigNumber.from(567).mul(BigNumber.from(2).pow(128)).div(expandTo18Decimals(2))
+            (567n * (2n ** 128n)) / expandTo18Decimals(2n)
           )
         })
         it('allows donating token1', async () => {
-          await expect(flash(0, 0, constants.AddressZero, 0, 678))
+          await expect(flash(0, 0, ZeroAddress, 0, 678))
             .to.emit(token1, 'Transfer')
-            .withArgs(wallet.address, pool.address, 678)
+            .withArgs(wallet.address, await pool.getAddress(), 678)
             .to.not.emit(token0, 'Transfer')
           expect(await pool.feeGrowthGlobal1X128()).to.eq(
-            BigNumber.from(678).mul(BigNumber.from(2).pow(128)).div(expandTo18Decimals(2))
+            (678n * (2n ** 128n)) / expandTo18Decimals(2n)
           )
         })
         it('allows donating token0 and token1 together', async () => {
-          await expect(flash(0, 0, constants.AddressZero, 789, 1234))
+          await expect(flash(0, 0, ZeroAddress, 789, 1234))
             .to.emit(token0, 'Transfer')
-            .withArgs(wallet.address, pool.address, 789)
+            .withArgs(wallet.address, await pool.getAddress(), 789)
             .to.emit(token1, 'Transfer')
-            .withArgs(wallet.address, pool.address, 1234)
+            .withArgs(wallet.address, await pool.getAddress(), 1234)
 
           expect(await pool.feeGrowthGlobal0X128()).to.eq(
-            BigNumber.from(789).mul(BigNumber.from(2).pow(128)).div(expandTo18Decimals(2))
+            (789n * (2n ** 128n)) / expandTo18Decimals(2n)
           )
           expect(await pool.feeGrowthGlobal1X128()).to.eq(
-            BigNumber.from(1234).mul(BigNumber.from(2).pow(128)).div(expandTo18Decimals(2))
+            (1234n * (2n ** 128n)) / expandTo18Decimals(2n)
           )
         })
       })
@@ -1519,7 +1516,7 @@ describe('UniswapV3Pool', () => {
         it('emits an event', async () => {
           await expect(flash(1001, 2001, other.address))
             .to.emit(pool, 'Flash')
-            .withArgs(swapTarget.address, other.address, 1001, 2001, 4, 7)
+            .withArgs(await swapTarget.getAddress(), other.address, 1001, 2001, 4, 7)
         })
 
         it('increases the fee growth by the expected amount', async () => {
@@ -1530,54 +1527,54 @@ describe('UniswapV3Pool', () => {
           expect(token1ProtocolFees).to.eq(2)
 
           expect(await pool.feeGrowthGlobal0X128()).to.eq(
-            BigNumber.from(6).mul(BigNumber.from(2).pow(128)).div(expandTo18Decimals(2))
+            (6n * (2n ** 128n)) / expandTo18Decimals(2n)
           )
           expect(await pool.feeGrowthGlobal1X128()).to.eq(
-            BigNumber.from(11).mul(BigNumber.from(2).pow(128)).div(expandTo18Decimals(2))
+            (11n * (2n ** 128n)) / expandTo18Decimals(2n)
           )
         })
         it('allows donating token0', async () => {
-          await expect(flash(0, 0, constants.AddressZero, 567, 0))
+          await expect(flash(0, 0, ZeroAddress, 567, 0))
             .to.emit(token0, 'Transfer')
-            .withArgs(wallet.address, pool.address, 567)
+            .withArgs(wallet.address, await pool.getAddress(), 567)
             .to.not.emit(token1, 'Transfer')
 
           const { token0: token0ProtocolFees } = await pool.protocolFees()
           expect(token0ProtocolFees).to.eq(94)
 
           expect(await pool.feeGrowthGlobal0X128()).to.eq(
-            BigNumber.from(473).mul(BigNumber.from(2).pow(128)).div(expandTo18Decimals(2))
+            (473n * (2n ** 128n)) / expandTo18Decimals(2n)
           )
         })
         it('allows donating token1', async () => {
-          await expect(flash(0, 0, constants.AddressZero, 0, 678))
+          await expect(flash(0, 0, ZeroAddress, 0, 678))
             .to.emit(token1, 'Transfer')
-            .withArgs(wallet.address, pool.address, 678)
+            .withArgs(wallet.address, await pool.getAddress(), 678)
             .to.not.emit(token0, 'Transfer')
 
           const { token1: token1ProtocolFees } = await pool.protocolFees()
           expect(token1ProtocolFees).to.eq(113)
 
           expect(await pool.feeGrowthGlobal1X128()).to.eq(
-            BigNumber.from(565).mul(BigNumber.from(2).pow(128)).div(expandTo18Decimals(2))
+            (565n * (2n ** 128n)) / expandTo18Decimals(2n)
           )
         })
         it('allows donating token0 and token1 together', async () => {
-          await expect(flash(0, 0, constants.AddressZero, 789, 1234))
+          await expect(flash(0, 0, ZeroAddress, 789, 1234))
             .to.emit(token0, 'Transfer')
-            .withArgs(wallet.address, pool.address, 789)
+            .withArgs(wallet.address, await pool.getAddress(), 789)
             .to.emit(token1, 'Transfer')
-            .withArgs(wallet.address, pool.address, 1234)
+            .withArgs(wallet.address, await pool.getAddress(), 1234)
 
           const { token0: token0ProtocolFees, token1: token1ProtocolFees } = await pool.protocolFees()
           expect(token0ProtocolFees).to.eq(131)
           expect(token1ProtocolFees).to.eq(205)
 
           expect(await pool.feeGrowthGlobal0X128()).to.eq(
-            BigNumber.from(658).mul(BigNumber.from(2).pow(128)).div(expandTo18Decimals(2))
+            (658n * (2n ** 128n)) / expandTo18Decimals(2n)
           )
           expect(await pool.feeGrowthGlobal1X128()).to.eq(
-            BigNumber.from(1029).mul(BigNumber.from(2).pow(128)).div(expandTo18Decimals(2))
+            (1029n * (2n ** 128n)) / expandTo18Decimals(2n)
           )
         })
       })
@@ -1589,7 +1586,7 @@ describe('UniswapV3Pool', () => {
       await expect(pool.increaseObservationCardinalityNext(2)).to.be.reverted
     })
     describe('after initialization', () => {
-      beforeEach('initialize the pool', () => pool.initialize(encodePriceSqrt(1, 1)))
+      beforeEach('initialize the pool', () => pool.initialize(encodePriceSqrt(1n, 1n)))
       it('oracle starting state after initialization', async () => {
         const { observationCardinality, observationIndex, observationCardinalityNext } = await pool.slot0()
         expect(observationCardinality).to.eq(1)
@@ -1626,7 +1623,7 @@ describe('UniswapV3Pool', () => {
 
   describe('#setFeeProtocol', () => {
     beforeEach('initialize the pool', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
+      await pool.initialize(encodePriceSqrt(1n, 1n))
     })
 
     it('can only be called by factory owner', async () => {
@@ -1679,8 +1676,8 @@ describe('UniswapV3Pool', () => {
 
   describe('#lock', () => {
     beforeEach('initialize the pool', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
-      await mint(wallet.address, minTick, maxTick, expandTo18Decimals(1))
+      await pool.initialize(encodePriceSqrt(1n, 1n))
+      await mint(wallet.address, minTick, maxTick, expandTo18Decimals(1n))
     })
 
     it('cannot reenter from swap callback', async () => {
@@ -1689,7 +1686,7 @@ describe('UniswapV3Pool', () => {
       ).deploy()) as TestUniswapV3ReentrantCallee
 
       // the tests happen in solidity
-      await expect(reentrant.swapToReenter(pool.address)).to.be.revertedWith('Unable to reenter')
+      await expect(reentrant.swapToReenter(await pool.getAddress())).to.be.revertedWith('Unable to reenter')
     })
   })
 
@@ -1698,8 +1695,8 @@ describe('UniswapV3Pool', () => {
     const tickUpper = TICK_SPACINGS[FeeAmount.MEDIUM]
     const tickSpacing = TICK_SPACINGS[FeeAmount.MEDIUM]
     beforeEach(async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
-      await mint(wallet.address, tickLower, tickUpper, 10)
+      await pool.initialize(encodePriceSqrt(1n, 1n))
+      await mint(wallet.address, tickLower, tickUpper, 10n)
     })
     it('throws if ticks are in reverse order', async () => {
       await expect(pool.snapshotCumulativesInside(tickUpper, tickLower)).to.be.reverted
@@ -1736,63 +1733,63 @@ describe('UniswapV3Pool', () => {
         tickCumulativeInside,
         secondsInside,
       } = await pool.snapshotCumulativesInside(tickLower, tickUpper)
-      expect(secondsPerLiquidityInsideX128).to.eq(BigNumber.from(5).shl(128).div(10))
+      expect(secondsPerLiquidityInsideX128).to.eq((5n << 128n) / 10n)
       expect(tickCumulativeInside, 'tickCumulativeInside').to.eq(0)
       expect(secondsInside).to.eq(5)
     })
     it('does not account for time increase above range', async () => {
       await pool.advanceTime(5)
-      await swapToHigherPrice(encodePriceSqrt(2, 1), wallet.address)
+      await swapToHigherPrice(encodePriceSqrt(2n, 1n), wallet.address)
       await pool.advanceTime(7)
       const {
         secondsPerLiquidityInsideX128,
         tickCumulativeInside,
         secondsInside,
       } = await pool.snapshotCumulativesInside(tickLower, tickUpper)
-      expect(secondsPerLiquidityInsideX128).to.eq(BigNumber.from(5).shl(128).div(10))
+      expect(secondsPerLiquidityInsideX128).to.eq((5n << 128n) / 10n)
       expect(tickCumulativeInside, 'tickCumulativeInside').to.eq(0)
       expect(secondsInside).to.eq(5)
     })
     it('does not account for time increase below range', async () => {
       await pool.advanceTime(5)
-      await swapToLowerPrice(encodePriceSqrt(1, 2), wallet.address)
+      await swapToLowerPrice(encodePriceSqrt(1n, 2n), wallet.address)
       await pool.advanceTime(7)
       const {
         secondsPerLiquidityInsideX128,
         tickCumulativeInside,
         secondsInside,
       } = await pool.snapshotCumulativesInside(tickLower, tickUpper)
-      expect(secondsPerLiquidityInsideX128).to.eq(BigNumber.from(5).shl(128).div(10))
+      expect(secondsPerLiquidityInsideX128).to.eq((5n << 128n) / 10n)
       // tick is 0 for 5 seconds, then not in range
       expect(tickCumulativeInside, 'tickCumulativeInside').to.eq(0)
       expect(secondsInside).to.eq(5)
     })
     it('time increase below range is not counted', async () => {
-      await swapToLowerPrice(encodePriceSqrt(1, 2), wallet.address)
+      await swapToLowerPrice(encodePriceSqrt(1n, 2n), wallet.address)
       await pool.advanceTime(5)
-      await swapToHigherPrice(encodePriceSqrt(1, 1), wallet.address)
+      await swapToHigherPrice(encodePriceSqrt(1n, 1n), wallet.address)
       await pool.advanceTime(7)
       const {
         secondsPerLiquidityInsideX128,
         tickCumulativeInside,
         secondsInside,
       } = await pool.snapshotCumulativesInside(tickLower, tickUpper)
-      expect(secondsPerLiquidityInsideX128).to.eq(BigNumber.from(7).shl(128).div(10))
+      expect(secondsPerLiquidityInsideX128).to.eq((7n << 128n) / 10n)
       // tick is not in range then tick is 0 for 7 seconds
       expect(tickCumulativeInside, 'tickCumulativeInside').to.eq(0)
       expect(secondsInside).to.eq(7)
     })
     it('time increase above range is not counted', async () => {
-      await swapToHigherPrice(encodePriceSqrt(2, 1), wallet.address)
+      await swapToHigherPrice(encodePriceSqrt(2n, 1n), wallet.address)
       await pool.advanceTime(5)
-      await swapToLowerPrice(encodePriceSqrt(1, 1), wallet.address)
+      await swapToLowerPrice(encodePriceSqrt(1n, 1n), wallet.address)
       await pool.advanceTime(7)
       const {
         secondsPerLiquidityInsideX128,
         tickCumulativeInside,
         secondsInside,
       } = await pool.snapshotCumulativesInside(tickLower, tickUpper)
-      expect(secondsPerLiquidityInsideX128).to.eq(BigNumber.from(7).shl(128).div(10))
+      expect(secondsPerLiquidityInsideX128).to.eq((7n << 128n) / 10n)
       expect((await pool.slot0()).tick).to.eq(-1) // justify the -7 tick cumulative inside value
       expect(tickCumulativeInside, 'tickCumulativeInside').to.eq(-7)
       expect(secondsInside).to.eq(7)
@@ -1800,14 +1797,14 @@ describe('UniswapV3Pool', () => {
     it('positions minted after time spent', async () => {
       await pool.advanceTime(5)
       await mint(wallet.address, tickUpper, getMaxTick(tickSpacing), 15)
-      await swapToHigherPrice(encodePriceSqrt(2, 1), wallet.address)
+      await swapToHigherPrice(encodePriceSqrt(2n, 1n), wallet.address)
       await pool.advanceTime(8)
       const {
         secondsPerLiquidityInsideX128,
         tickCumulativeInside,
         secondsInside,
       } = await pool.snapshotCumulativesInside(tickUpper, getMaxTick(tickSpacing))
-      expect(secondsPerLiquidityInsideX128).to.eq(BigNumber.from(8).shl(128).div(15))
+      expect(secondsPerLiquidityInsideX128).to.eq((8n << 128n) / 15n)
       // the tick of 2/1 is 6931
       // 8 seconds * 6931 = 55448
       expect(tickCumulativeInside, 'tickCumulativeInside').to.eq(55448)
@@ -1816,14 +1813,14 @@ describe('UniswapV3Pool', () => {
     it('overlapping liquidity is aggregated', async () => {
       await mint(wallet.address, tickLower, getMaxTick(tickSpacing), 15)
       await pool.advanceTime(5)
-      await swapToHigherPrice(encodePriceSqrt(2, 1), wallet.address)
+      await swapToHigherPrice(encodePriceSqrt(2n, 1n), wallet.address)
       await pool.advanceTime(8)
       const {
         secondsPerLiquidityInsideX128,
         tickCumulativeInside,
         secondsInside,
       } = await pool.snapshotCumulativesInside(tickLower, tickUpper)
-      expect(secondsPerLiquidityInsideX128).to.eq(BigNumber.from(5).shl(128).div(25))
+      expect(secondsPerLiquidityInsideX128).to.eq((5n << 128n) / 25n)
       expect(tickCumulativeInside, 'tickCumulativeInside').to.eq(0)
       expect(secondsInside).to.eq(5)
     })
@@ -1837,21 +1834,21 @@ describe('UniswapV3Pool', () => {
       } = await pool.snapshotCumulativesInside(getMinTick(tickSpacing), tickLower)
       await pool.advanceTime(8)
       // 13 seconds in starting range, then 3 seconds in newly minted range
-      await swapToLowerPrice(encodePriceSqrt(1, 2), wallet.address)
+      await swapToLowerPrice(encodePriceSqrt(1n, 2n), wallet.address)
       await pool.advanceTime(3)
       const {
         secondsPerLiquidityInsideX128,
         tickCumulativeInside,
         secondsInside,
       } = await pool.snapshotCumulativesInside(getMinTick(tickSpacing), tickLower)
-      const expectedDiffSecondsPerLiquidity = BigNumber.from(3).shl(128).div(15)
-      expect(secondsPerLiquidityInsideX128.sub(secondsPerLiquidityInsideX128Start)).to.eq(
+      const expectedDiffSecondsPerLiquidity = (3n << 128n) / 15n
+      expect(secondsPerLiquidityInsideX128 - secondsPerLiquidityInsideX128Start).to.eq(
         expectedDiffSecondsPerLiquidity
       )
       expect(secondsPerLiquidityInsideX128).to.not.eq(expectedDiffSecondsPerLiquidity)
       // the tick is the one corresponding to the price of 1/2, or log base 1.0001 of 0.5
       // this is -6932, and 3 seconds have passed, so the cumulative computed from the diff equals 6932 * 3
-      expect(tickCumulativeInside.sub(tickCumulativeInsideStart), 'tickCumulativeInside').to.eq(-20796)
+      expect(tickCumulativeInside - tickCumulativeInsideStart, 'tickCumulativeInside').to.eq(-20796n)
       expect(secondsInside - secondsInsideStart).to.eq(3)
       expect(secondsInside).to.not.eq(3)
     })
@@ -1859,8 +1856,8 @@ describe('UniswapV3Pool', () => {
 
   describe('fees overflow scenarios', async () => {
     it('up to max uint 128', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
-      await mint(wallet.address, minTick, maxTick, 1)
+      await pool.initialize(encodePriceSqrt(1n, 1n))
+      await mint(wallet.address, minTick, maxTick, 1n)
       await flash(0, 0, wallet.address, MaxUint128, MaxUint128)
 
       const [feeGrowthGlobal0X128, feeGrowthGlobal1X128] = await Promise.all([
@@ -1868,10 +1865,10 @@ describe('UniswapV3Pool', () => {
         pool.feeGrowthGlobal1X128(),
       ])
       // all 1s in first 128 bits
-      expect(feeGrowthGlobal0X128).to.eq(MaxUint128.shl(128))
-      expect(feeGrowthGlobal1X128).to.eq(MaxUint128.shl(128))
+      expect(feeGrowthGlobal0X128).to.eq(MaxUint128 << 128n)
+      expect(feeGrowthGlobal1X128).to.eq(MaxUint128 << 128n)
       await pool.burn(minTick, maxTick, 0)
-      const { amount0, amount1 } = await pool.callStatic.collect(
+      const { amount0, amount1 } = await pool.collect.staticCall(
         wallet.address,
         minTick,
         maxTick,
@@ -1883,8 +1880,8 @@ describe('UniswapV3Pool', () => {
     })
 
     it('overflow max uint 128', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
-      await mint(wallet.address, minTick, maxTick, 1)
+      await pool.initialize(encodePriceSqrt(1n, 1n))
+      await mint(wallet.address, minTick, maxTick, 1n)
       await flash(0, 0, wallet.address, MaxUint128, MaxUint128)
       await flash(0, 0, wallet.address, 1, 1)
 
@@ -1896,7 +1893,7 @@ describe('UniswapV3Pool', () => {
       expect(feeGrowthGlobal0X128).to.eq(0)
       expect(feeGrowthGlobal1X128).to.eq(0)
       await pool.burn(minTick, maxTick, 0)
-      const { amount0, amount1 } = await pool.callStatic.collect(
+      const { amount0, amount1 } = await pool.collect.staticCall(
         wallet.address,
         minTick,
         maxTick,
@@ -1909,14 +1906,14 @@ describe('UniswapV3Pool', () => {
     })
 
     it('overflow max uint 128 after poke burns fees owed to 0', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
-      await mint(wallet.address, minTick, maxTick, 1)
+      await pool.initialize(encodePriceSqrt(1n, 1n))
+      await mint(wallet.address, minTick, maxTick, 1n)
       await flash(0, 0, wallet.address, MaxUint128, MaxUint128)
       await pool.burn(minTick, maxTick, 0)
       await flash(0, 0, wallet.address, 1, 1)
       await pool.burn(minTick, maxTick, 0)
 
-      const { amount0, amount1 } = await pool.callStatic.collect(
+      const { amount0, amount1 } = await pool.collect.staticCall(
         wallet.address,
         minTick,
         maxTick,
@@ -1929,29 +1926,28 @@ describe('UniswapV3Pool', () => {
     })
 
     it('two positions at the same snapshot', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
-      await mint(wallet.address, minTick, maxTick, 1)
-      await mint(other.address, minTick, maxTick, 1)
+      await pool.initialize(encodePriceSqrt(1n, 1n))
+      await mint(wallet.address, minTick, maxTick, 1n)
+      await mint(other.address, minTick, maxTick, 1n)
       await flash(0, 0, wallet.address, MaxUint128, 0)
       await flash(0, 0, wallet.address, MaxUint128, 0)
       const feeGrowthGlobal0X128 = await pool.feeGrowthGlobal0X128()
-      expect(feeGrowthGlobal0X128).to.eq(MaxUint128.shl(128))
+      expect(feeGrowthGlobal0X128).to.eq(MaxUint128 << 128n)
       await flash(0, 0, wallet.address, 2, 0)
       await pool.burn(minTick, maxTick, 0)
       await pool.connect(other).burn(minTick, maxTick, 0)
-      let { amount0 } = await pool.callStatic.collect(wallet.address, minTick, maxTick, MaxUint128, MaxUint128)
+      let { amount0 } = await pool.collect.staticCall(wallet.address, minTick, maxTick, MaxUint128, MaxUint128)
       expect(amount0, 'amount0 of wallet').to.eq(0)
       ;({ amount0 } = await pool
-        .connect(other)
-        .callStatic.collect(other.address, minTick, maxTick, MaxUint128, MaxUint128))
+        .connect(other).collect.staticCall(other.address, minTick, maxTick, MaxUint128, MaxUint128))
       expect(amount0, 'amount0 of other').to.eq(0)
     })
 
     it('two positions 1 wei of fees apart overflows exactly once', async () => {
-      await pool.initialize(encodePriceSqrt(1, 1))
-      await mint(wallet.address, minTick, maxTick, 1)
+      await pool.initialize(encodePriceSqrt(1n, 1n))
+      await mint(wallet.address, minTick, maxTick, 1n)
       await flash(0, 0, wallet.address, 1, 0)
-      await mint(other.address, minTick, maxTick, 1)
+      await mint(other.address, minTick, maxTick, 1n)
       await flash(0, 0, wallet.address, MaxUint128, 0)
       await flash(0, 0, wallet.address, MaxUint128, 0)
       const feeGrowthGlobal0X128 = await pool.feeGrowthGlobal0X128()
@@ -1959,11 +1955,11 @@ describe('UniswapV3Pool', () => {
       await flash(0, 0, wallet.address, 2, 0)
       await pool.burn(minTick, maxTick, 0)
       await pool.connect(other).burn(minTick, maxTick, 0)
-      let { amount0 } = await pool.callStatic.collect(wallet.address, minTick, maxTick, MaxUint128, MaxUint128)
+      let { amount0 } = await pool.collect.staticCall(wallet.address, minTick, maxTick, MaxUint128, MaxUint128)
       expect(amount0, 'amount0 of wallet').to.eq(1)
       ;({ amount0 } = await pool
         .connect(other)
-        .callStatic.collect(other.address, minTick, maxTick, MaxUint128, MaxUint128))
+        .collect.staticCall(other.address, minTick, maxTick, MaxUint128, MaxUint128))
       expect(amount0, 'amount0 of other').to.eq(0)
     })
   })
@@ -1973,70 +1969,70 @@ describe('UniswapV3Pool', () => {
     beforeEach('deploy swap test', async () => {
       const underpayFactory = await ethers.getContractFactory('TestUniswapV3SwapPay')
       underpay = (await underpayFactory.deploy()) as TestUniswapV3SwapPay
-      await token0.approve(underpay.address, constants.MaxUint256)
-      await token1.approve(underpay.address, constants.MaxUint256)
-      await pool.initialize(encodePriceSqrt(1, 1))
-      await mint(wallet.address, minTick, maxTick, expandTo18Decimals(1))
+      await token0.approve(await underpay.getAddress(), MaxUint256)
+      await token1.approve(await underpay.getAddress(), MaxUint256)
+      await pool.initialize(encodePriceSqrt(1n, 1n))
+      await mint(wallet.address, minTick, maxTick, expandTo18Decimals(1n))
     })
 
     it('underpay zero for one and exact in', async () => {
       await expect(
-        underpay.swap(pool.address, wallet.address, true, MIN_SQRT_RATIO.add(1), 1000, 1, 0)
+        underpay.swap(await pool.getAddress(), wallet.address, true, MIN_SQRT_RATIO + 1n, 1000n, 1n, 0n)
       ).to.be.revertedWith('IIA')
     })
     it('pay in the wrong token zero for one and exact in', async () => {
       await expect(
-        underpay.swap(pool.address, wallet.address, true, MIN_SQRT_RATIO.add(1), 1000, 0, 2000)
+        underpay.swap(await pool.getAddress(), wallet.address, true, MIN_SQRT_RATIO + 1n, 1000n, 0n, 2000n)
       ).to.be.revertedWith('IIA')
     })
     it('overpay zero for one and exact in', async () => {
       await expect(
-        underpay.swap(pool.address, wallet.address, true, MIN_SQRT_RATIO.add(1), 1000, 2000, 0)
+        underpay.swap(await pool.getAddress(), wallet.address, true, MIN_SQRT_RATIO + 1n, 1000n, 2000n, 0n)
       ).to.not.be.revertedWith('IIA')
     })
     it('underpay zero for one and exact out', async () => {
       await expect(
-        underpay.swap(pool.address, wallet.address, true, MIN_SQRT_RATIO.add(1), -1000, 1, 0)
+        underpay.swap(await pool.getAddress(), wallet.address, true, MIN_SQRT_RATIO + 1n, -1000n, 1n, 0n)
       ).to.be.revertedWith('IIA')
     })
     it('pay in the wrong token zero for one and exact out', async () => {
       await expect(
-        underpay.swap(pool.address, wallet.address, true, MIN_SQRT_RATIO.add(1), -1000, 0, 2000)
+        underpay.swap(await pool.getAddress(), wallet.address, true, MIN_SQRT_RATIO + 1n, -1000n, 0n, 2000n)
       ).to.be.revertedWith('IIA')
     })
     it('overpay zero for one and exact out', async () => {
       await expect(
-        underpay.swap(pool.address, wallet.address, true, MIN_SQRT_RATIO.add(1), -1000, 2000, 0)
+        underpay.swap(await pool.getAddress(), wallet.address, true, MIN_SQRT_RATIO + 1n, -1000n, 2000n, 0n)
       ).to.not.be.revertedWith('IIA')
     })
     it('underpay one for zero and exact in', async () => {
       await expect(
-        underpay.swap(pool.address, wallet.address, false, MAX_SQRT_RATIO.sub(1), 1000, 0, 1)
+        underpay.swap(await pool.getAddress(), wallet.address, false, MAX_SQRT_RATIO - 1n, 1000n, 0n, 1n)
       ).to.be.revertedWith('IIA')
     })
     it('pay in the wrong token one for zero and exact in', async () => {
       await expect(
-        underpay.swap(pool.address, wallet.address, false, MAX_SQRT_RATIO.sub(1), 1000, 2000, 0)
+        underpay.swap(await pool.getAddress(), wallet.address, false, MAX_SQRT_RATIO - 1n, 1000n, 2000n, 0n)
       ).to.be.revertedWith('IIA')
     })
     it('overpay one for zero and exact in', async () => {
       await expect(
-        underpay.swap(pool.address, wallet.address, false, MAX_SQRT_RATIO.sub(1), 1000, 0, 2000)
+        underpay.swap(await pool.getAddress(), wallet.address, false, MAX_SQRT_RATIO - 1n, 1000n, 0n, 2000n)
       ).to.not.be.revertedWith('IIA')
     })
     it('underpay one for zero and exact out', async () => {
       await expect(
-        underpay.swap(pool.address, wallet.address, false, MAX_SQRT_RATIO.sub(1), -1000, 0, 1)
+        underpay.swap(await pool.getAddress(), wallet.address, false, MAX_SQRT_RATIO - 1n, -1000n, 0n, 1n)
       ).to.be.revertedWith('IIA')
     })
     it('pay in the wrong token one for zero and exact out', async () => {
       await expect(
-        underpay.swap(pool.address, wallet.address, false, MAX_SQRT_RATIO.sub(1), -1000, 2000, 0)
+        underpay.swap(await pool.getAddress(), wallet.address, false, MAX_SQRT_RATIO - 1n, -1000n, 2000n, 0n)
       ).to.be.revertedWith('IIA')
     })
     it('overpay one for zero and exact out', async () => {
       await expect(
-        underpay.swap(pool.address, wallet.address, false, MAX_SQRT_RATIO.sub(1), -1000, 0, 2000)
+        underpay.swap(await pool.getAddress(), wallet.address, false, MAX_SQRT_RATIO - 1n, -1000n, 0n, 2000n)
       ).to.not.be.revertedWith('IIA')
     })
   })

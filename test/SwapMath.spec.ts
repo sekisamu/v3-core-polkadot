@@ -1,29 +1,42 @@
-import { BigNumber } from 'ethers'
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers"
 import { ethers } from 'hardhat'
-import { SwapMathTest } from '../typechain/SwapMathTest'
-
+import { BigNumber } from '@ethersproject/bignumber'
+import { SwapMathTest, SqrtPriceMathTest } from '../typechain-types'
 import { expect } from './shared/expect'
 import snapshotGasCost from './shared/snapshotGasCost'
-import { encodePriceSqrt, expandTo18Decimals } from './shared/utilities'
-import { SqrtPriceMathTest } from '../typechain/SqrtPriceMathTest'
+import { encodePriceSqrt, expandTo18Decimals, getWallets } from './shared/utilities'
 
 describe('SwapMath', () => {
   let swapMath: SwapMathTest
   let sqrtPriceMath: SqrtPriceMathTest
-  before(async () => {
+  beforeEach(async () => {
+    const deployment = await deploySwapMath()
+    swapMath = deployment.swapMath
+    sqrtPriceMath = deployment.sqrtPriceMath
+  })
+  
+  async function deploySwapMath() {
+    const [wallet] = getWallets(1)
     const swapMathTestFactory = await ethers.getContractFactory('SwapMathTest')
     const sqrtPriceMathTestFactory = await ethers.getContractFactory('SqrtPriceMathTest')
-    swapMath = (await swapMathTestFactory.deploy()) as SwapMathTest
-    sqrtPriceMath = (await sqrtPriceMathTestFactory.deploy()) as SqrtPriceMathTest
-  })
+    
+    const swapMath = await swapMathTestFactory.deploy()
+    const sqrtPriceMath = await sqrtPriceMathTestFactory.deploy()
+    
+    await swapMath.waitForDeployment()
+    await sqrtPriceMath.waitForDeployment()
+
+    return { swapMath, sqrtPriceMath }
+  }
+
 
   describe('#computeSwapStep', () => {
     it('exact amount in that gets capped at price target in one for zero', async () => {
-      const price = encodePriceSqrt(1, 1)
-      const priceTarget = encodePriceSqrt(101, 100)
-      const liquidity = expandTo18Decimals(2)
-      const amount = expandTo18Decimals(1)
-      const fee = 600
+      const price = encodePriceSqrt(1n, 1n)
+      const priceTarget = encodePriceSqrt(101n, 100n)
+      const liquidity = expandTo18Decimals(2n)
+      const amount = expandTo18Decimals(1n)
+      const fee = 600n
       const zeroForOne = false
 
       const { amountIn, amountOut, sqrtQ, feeAmount } = await swapMath.computeSwapStep(
@@ -34,10 +47,10 @@ describe('SwapMath', () => {
         fee
       )
 
-      expect(amountIn).to.eq('9975124224178055')
-      expect(feeAmount).to.eq('5988667735148')
-      expect(amountOut).to.eq('9925619580021728')
-      expect(amountIn.add(feeAmount), 'entire amount is not used').to.lt(amount)
+      expect(amountIn).to.eq(9975124224178055n)
+      expect(feeAmount).to.eq(5988667735148n)
+      expect(amountOut).to.eq(9925619580021728n)
+      expect(amountIn + feeAmount, 'entire amount is not used').to.lt(amount)
 
       const priceAfterWholeInputAmount = await sqrtPriceMath.getNextSqrtPriceFromInput(
         price,
@@ -51,11 +64,11 @@ describe('SwapMath', () => {
     })
 
     it('exact amount out that gets capped at price target in one for zero', async () => {
-      const price = encodePriceSqrt(1, 1)
-      const priceTarget = encodePriceSqrt(101, 100)
-      const liquidity = expandTo18Decimals(2)
-      const amount = expandTo18Decimals(1).mul(-1)
-      const fee = 600
+      const price = encodePriceSqrt(1n, 1n)
+      const priceTarget = encodePriceSqrt(101n, 100n)
+      const liquidity = expandTo18Decimals(2n)
+      const amount = -expandTo18Decimals(1n)
+      const fee = 600n
       const zeroForOne = false
 
       const { amountIn, amountOut, sqrtQ, feeAmount } = await swapMath.computeSwapStep(
@@ -69,12 +82,12 @@ describe('SwapMath', () => {
       expect(amountIn).to.eq('9975124224178055')
       expect(feeAmount).to.eq('5988667735148')
       expect(amountOut).to.eq('9925619580021728')
-      expect(amountOut, 'entire amount out is not returned').to.lt(amount.mul(-1))
+      expect(amountOut, 'entire amount out is not returned').to.lt(-amount)
 
       const priceAfterWholeOutputAmount = await sqrtPriceMath.getNextSqrtPriceFromOutput(
         price,
         liquidity,
-        amount.mul(-1),
+        -amount,
         zeroForOne
       )
 
@@ -83,11 +96,11 @@ describe('SwapMath', () => {
     })
 
     it('exact amount in that is fully spent in one for zero', async () => {
-      const price = encodePriceSqrt(1, 1)
-      const priceTarget = encodePriceSqrt(1000, 100)
-      const liquidity = expandTo18Decimals(2)
-      const amount = expandTo18Decimals(1)
-      const fee = 600
+      const price = encodePriceSqrt(1n, 1n)
+      const priceTarget = encodePriceSqrt(1000n, 100n)
+      const liquidity = expandTo18Decimals(2n)
+      const amount = expandTo18Decimals(1n)
+      const fee = 600n
       const zeroForOne = false
 
       const { amountIn, amountOut, sqrtQ, feeAmount } = await swapMath.computeSwapStep(
@@ -101,12 +114,12 @@ describe('SwapMath', () => {
       expect(amountIn).to.eq('999400000000000000')
       expect(feeAmount).to.eq('600000000000000')
       expect(amountOut).to.eq('666399946655997866')
-      expect(amountIn.add(feeAmount), 'entire amount is used').to.eq(amount)
+      expect(amountIn + feeAmount, 'entire amount is used').to.eq(amount)
 
       const priceAfterWholeInputAmountLessFee = await sqrtPriceMath.getNextSqrtPriceFromInput(
         price,
         liquidity,
-        amount.sub(feeAmount),
+        amount - feeAmount,
         zeroForOne
       )
 
@@ -115,11 +128,11 @@ describe('SwapMath', () => {
     })
 
     it('exact amount out that is fully received in one for zero', async () => {
-      const price = encodePriceSqrt(1, 1)
-      const priceTarget = encodePriceSqrt(10000, 100)
-      const liquidity = expandTo18Decimals(2)
-      const amount = expandTo18Decimals(1).mul(-1)
-      const fee = 600
+      const price = encodePriceSqrt(1n, 1n)
+      const priceTarget = encodePriceSqrt(10000n, 100n)
+      const liquidity = expandTo18Decimals(2n)
+      const amount = -expandTo18Decimals(1n)
+      const fee = 600n
       const zeroForOne = false
 
       const { amountIn, amountOut, sqrtQ, feeAmount } = await swapMath.computeSwapStep(
@@ -132,12 +145,12 @@ describe('SwapMath', () => {
 
       expect(amountIn).to.eq('2000000000000000000')
       expect(feeAmount).to.eq('1200720432259356')
-      expect(amountOut).to.eq(amount.mul(-1))
+      expect(amountOut).to.eq(-amount)
 
       const priceAfterWholeOutputAmount = await sqrtPriceMath.getNextSqrtPriceFromOutput(
         price,
         liquidity,
-        amount.mul(-1),
+        -amount,
         zeroForOne
       )
 
@@ -147,11 +160,11 @@ describe('SwapMath', () => {
 
     it('amount out is capped at the desired amount out', async () => {
       const { amountIn, amountOut, sqrtQ, feeAmount } = await swapMath.computeSwapStep(
-        BigNumber.from('417332158212080721273783715441582'),
-        BigNumber.from('1452870262520218020823638996'),
-        '159344665391607089467575320103',
-        '-1',
-        1
+        417332158212080721273783715441582n,
+        1452870262520218020823638996n,
+        159344665391607089467575320103n,
+        -1n,
+        1n
       )
       expect(amountIn).to.eq('1')
       expect(feeAmount).to.eq('1')
@@ -161,15 +174,15 @@ describe('SwapMath', () => {
 
     it('target price of 1 uses partial input amount', async () => {
       const { amountIn, amountOut, sqrtQ, feeAmount } = await swapMath.computeSwapStep(
-        BigNumber.from('2'),
-        BigNumber.from('1'),
-        '1',
-        '3915081100057732413702495386755767',
-        1
+        2n,
+        1n,
+        1n,
+        3915081100057732413702495386755767n,
+        1n
       )
       expect(amountIn).to.eq('39614081257132168796771975168')
       expect(feeAmount).to.eq('39614120871253040049813')
-      expect(amountIn.add(feeAmount)).to.be.lte('3915081100057732413702495386755767')
+      expect(amountIn + feeAmount).to.be.lte(3915081100057732413702495386755767n)
       expect(amountOut).to.eq('0')
       expect(sqrtQ).to.eq('1')
     })
@@ -189,13 +202,13 @@ describe('SwapMath', () => {
     })
 
     it('handles intermediate insufficient liquidity in zero for one exact output case', async () => {
-      const sqrtP = BigNumber.from('20282409603651670423947251286016')
-      const sqrtPTarget = sqrtP.mul(11).div(10)
-      const liquidity = 1024
+      const sqrtP = 20282409603651670423947251286016n
+      const sqrtPTarget = (sqrtP * 11n) / 10n
+      const liquidity = 1024n
       // virtual reserves of one are only 4
       // https://www.wolframalpha.com/input/?i=1024+%2F+%2820282409603651670423947251286016+%2F+2**96%29
-      const amountRemaining = -4
-      const feePips = 3000
+      const amountRemaining = -4n
+      const feePips = 3000n
       const { amountIn, amountOut, sqrtQ, feeAmount } = await swapMath.computeSwapStep(
         sqrtP,
         sqrtPTarget,
@@ -210,13 +223,13 @@ describe('SwapMath', () => {
     })
 
     it('handles intermediate insufficient liquidity in one for zero exact output case', async () => {
-      const sqrtP = BigNumber.from('20282409603651670423947251286016')
-      const sqrtPTarget = sqrtP.mul(9).div(10)
-      const liquidity = 1024
+      const sqrtP = 20282409603651670423947251286016n
+      const sqrtPTarget = (sqrtP * 9n) / 10n
+      const liquidity = 1024n
       // virtual reserves of zero are only 262144
       // https://www.wolframalpha.com/input/?i=1024+*+%2820282409603651670423947251286016+%2F+2**96%29
-      const amountRemaining = -263000
-      const feePips = 3000
+      const amountRemaining = -263000n
+      const feePips = 3000n
       const { amountIn, amountOut, sqrtQ, feeAmount } = await swapMath.computeSwapStep(
         sqrtP,
         sqrtPTarget,
@@ -234,88 +247,88 @@ describe('SwapMath', () => {
       it('swap one for zero exact in capped', async () => {
         await snapshotGasCost(
           swapMath.getGasCostOfComputeSwapStep(
-            encodePriceSqrt(1, 1),
-            encodePriceSqrt(101, 100),
-            expandTo18Decimals(2),
-            expandTo18Decimals(1),
-            600
+            encodePriceSqrt(1n, 1n),
+            encodePriceSqrt(101n, 100n),
+            expandTo18Decimals(2n),
+            expandTo18Decimals(1n),
+            600n
           )
         )
       })
       it('swap zero for one exact in capped', async () => {
         await snapshotGasCost(
           swapMath.getGasCostOfComputeSwapStep(
-            encodePriceSqrt(1, 1),
-            encodePriceSqrt(99, 100),
-            expandTo18Decimals(2),
-            expandTo18Decimals(1),
-            600
+            encodePriceSqrt(1n, 1n),
+            encodePriceSqrt(99n, 100n),
+            expandTo18Decimals(2n),
+            expandTo18Decimals(1n),
+            600n
           )
         )
       })
       it('swap one for zero exact out capped', async () => {
         await snapshotGasCost(
           swapMath.getGasCostOfComputeSwapStep(
-            encodePriceSqrt(1, 1),
-            encodePriceSqrt(101, 100),
-            expandTo18Decimals(2),
-            expandTo18Decimals(1).mul(-1),
-            600
+            encodePriceSqrt(1n, 1n),
+            encodePriceSqrt(101n, 100n),
+            expandTo18Decimals(2n),
+            -expandTo18Decimals(1n),
+            600n
           )
         )
       })
       it('swap zero for one exact out capped', async () => {
         await snapshotGasCost(
           swapMath.getGasCostOfComputeSwapStep(
-            encodePriceSqrt(1, 1),
-            encodePriceSqrt(99, 100),
-            expandTo18Decimals(2),
-            expandTo18Decimals(1).mul(-1),
-            600
+            encodePriceSqrt(1n, 1n),
+            encodePriceSqrt(99n, 100n),
+            expandTo18Decimals(2n),
+            -expandTo18Decimals(1n),
+            600n
           )
         )
       })
       it('swap one for zero exact in partial', async () => {
         await snapshotGasCost(
           swapMath.getGasCostOfComputeSwapStep(
-            encodePriceSqrt(1, 1),
-            encodePriceSqrt(1010, 100),
-            expandTo18Decimals(2),
-            1000,
-            600
+            encodePriceSqrt(1n, 1n),
+            encodePriceSqrt(1010n, 100n),
+            expandTo18Decimals(2n),
+            1000n,
+            600n
           )
         )
       })
       it('swap zero for one exact in partial', async () => {
         await snapshotGasCost(
           swapMath.getGasCostOfComputeSwapStep(
-            encodePriceSqrt(1, 1),
-            encodePriceSqrt(99, 1000),
-            expandTo18Decimals(2),
-            1000,
-            600
+            encodePriceSqrt(1n, 1n),
+            encodePriceSqrt(99n, 1000n),
+            expandTo18Decimals(2n),
+            1000n,
+            600n
           )
         )
       })
       it('swap one for zero exact out partial', async () => {
         await snapshotGasCost(
           swapMath.getGasCostOfComputeSwapStep(
-            encodePriceSqrt(1, 1),
-            encodePriceSqrt(1010, 100),
-            expandTo18Decimals(2),
-            1000,
-            600
+            encodePriceSqrt(1n, 1n),
+            encodePriceSqrt(1010n, 100n),
+            expandTo18Decimals(2n),
+            1000n,
+            600n
           )
         )
       })
       it('swap zero for one exact out partial', async () => {
         await snapshotGasCost(
           swapMath.getGasCostOfComputeSwapStep(
-            encodePriceSqrt(1, 1),
-            encodePriceSqrt(99, 1000),
-            expandTo18Decimals(2),
-            1000,
-            600
+            encodePriceSqrt(1n, 1n),
+            encodePriceSqrt(99n, 1000n),
+            expandTo18Decimals(2n),
+            1000n,
+            600n
           )
         )
       })

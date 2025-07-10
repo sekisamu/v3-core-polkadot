@@ -1,5 +1,5 @@
 import { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-toolbox";
+// import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-ethers";
 import "@parity/hardhat-polkadot";
 
@@ -14,11 +14,11 @@ const config: HardhatUserConfig = {
     compilerSource: "binary",
     settings: {
       compilerPath: "~/.cargo/bin/resolc-0.3.0",
-      optimizer: {
-        enabled: true,
-        parameters: "z",
-        fallbackOz: true,
-      },
+      // optimizer: {
+        // enabled: true,
+        // parameters: "z",
+        // fallbackOz: true,
+      // },
     }
   },
   mocha: {
