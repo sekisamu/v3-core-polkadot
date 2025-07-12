@@ -6,6 +6,12 @@ import snapshotGasCost from './shared/snapshotGasCost'
 import { encodePriceSqrt, MIN_SQRT_RATIO, MAX_SQRT_RATIO } from './shared/utilities'
 import Decimal from 'decimal.js'
 
+import { jestSnapshotPlugin } from 'mocha-chai-jest-snapshot';
+import chai from 'chai';
+
+
+chai.use(jestSnapshotPlugin());
+
 const MIN_TICK = -887272
 const MAX_TICK = 887272
 
@@ -156,7 +162,7 @@ describe('TickMath', () => {
         })
         it('result', async () => {
           const result = await tickMath.getTickAtSqrtRatio(ratio)
-          expect(result.toString()).to.matchSnapshot()
+          expect(Number(result)).toMatchSnapshot()
         })
         // it('gas', async () => {
         //   await snapshotGasCost(tickMath.getGasCostOfGetTickAtSqrtRatio(ratio))
