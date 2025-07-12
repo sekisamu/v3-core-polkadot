@@ -35,7 +35,7 @@ library SqrtPriceMath {
         if (amount == 0) return sqrtPX96;
         uint256 numerator1;
         unchecked {
-        numerator1 = uint256(liquidity) << FixedPoint96.RESOLUTION;
+            numerator1 = uint256(liquidity) << FixedPoint96.RESOLUTION;
         }
 
         if (add) {
@@ -56,13 +56,15 @@ library SqrtPriceMath {
                 }
             }
 
-            return
-                uint160(
-                    UnsafeMath.divRoundingUp(
-                        numerator1,
-                        (numerator1 / sqrtPX96).add(amount)
-                    )
-                );
+            unchecked {
+                return
+                    uint160(
+                        UnsafeMath.divRoundingUp(
+                            numerator1,
+                            (numerator1 / sqrtPX96).add(amount)
+                        )
+                    );
+            }
         } else {
             uint256 product;
             // if the product overflows, we know the denominator underflows

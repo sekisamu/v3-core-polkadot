@@ -29,58 +29,56 @@ library FullMath {
                 prod0 := mul(a, b)
                 prod1 := sub(sub(mm, prod0), lt(mm, prod0))
             }
-        }
 
-        // Handle non-overflow cases, 256 by 256 division
-        if (prod1 == 0) {
-            require(denominator > 0);
-            assembly {
-                result := div(prod0, denominator)
+            // Handle non-overflow cases, 256 by 256 division
+            if (prod1 == 0) {
+                require(denominator > 0);
+                assembly {
+                    result := div(prod0, denominator)
+                }
+                return result;
             }
-            return result;
-        }
 
-        // Make sure the result is less than 2**256.
-        // Also prevents denominator == 0
-        require(denominator > prod1);
+            // Make sure the result is less than 2**256.
+            // Also prevents denominator == 0
+            require(denominator > prod1);
 
-        ///////////////////////////////////////////////
-        // 512 by 256 division.
-        ///////////////////////////////////////////////
+            ///////////////////////////////////////////////
+            // 512 by 256 division.
+            ///////////////////////////////////////////////
 
-        // Make division exact by subtracting the remainder from [prod1 prod0]
-        // Compute remainder using mulmod
-        uint256 remainder;
-        assembly {
-            remainder := mulmod(a, b, denominator)
-        }
-        // Subtract 256 bit number from 512 bit number
-        assembly {
-            prod1 := sub(prod1, gt(remainder, prod0))
-            prod0 := sub(prod0, remainder)
-        }
+            // Make division exact by subtracting the remainder from [prod1 prod0]
+            // Compute remainder using mulmod
+            uint256 remainder;
+            assembly {
+                remainder := mulmod(a, b, denominator)
+            }
+            // Subtract 256 bit number from 512 bit number
+            assembly {
+                prod1 := sub(prod1, gt(remainder, prod0))
+                prod0 := sub(prod0, remainder)
+            }
 
-        // Factor powers of two out of denominator
-        // Compute largest power of two divisor of denominator.
-        // Always >= 1.
-        uint256 twos = (~denominator + 1) & denominator;
-        // Divide denominator by power of two
-        assembly {
-            denominator := div(denominator, twos)
-        }
+            // Factor powers of two out of denominator
+            // Compute largest power of two divisor of denominator.
+            // Always >= 1.
+            uint256 twos = (~denominator + 1) & denominator;
+            // Divide denominator by power of two
+            assembly {
+                denominator := div(denominator, twos)
+            }
 
-        // Divide [prod1 prod0] by the factors of two
-        assembly {
-            prod0 := div(prod0, twos)
-        }
-        // Shift in bits from prod1 into prod0. For this we need
-        // to flip `twos` such that it is 2**256 / twos.
-        // If twos is zero, then it becomes one
-        assembly {
-            twos := add(div(sub(0, twos), twos), 1)
-        }
-        prod0 |= prod1 * twos;
-        unchecked {
+            // Divide [prod1 prod0] by the factors of two
+            assembly {
+                prod0 := div(prod0, twos)
+            }
+            // Shift in bits from prod1 into prod0. For this we need
+            // to flip `twos` such that it is 2**256 / twos.
+            // If twos is zero, then it becomes one
+            assembly {
+                twos := add(div(sub(0, twos), twos), 1)
+            }
+            prod0 |= prod1 * twos;
             // Handle non-overflow cases, 256 by 256 division
             // Invert denominator mod 2**256
             // Now that denominator is an odd number, it has an inverse
@@ -119,10 +117,13 @@ library FullMath {
         uint256 b,
         uint256 denominator
     ) internal pure returns (uint256 result) {
-        result = mulDiv(a, b, denominator);
-        if (mulmod(a, b, denominator) > 0) {
-            require(result < type(uint256).max);
-            result++;
+        unchecked {
+            result = mulDiv(a, b, denominator);
+
+            if (mulmod(a, b, denominator) > 0) {
+                require(result < type(uint256).max);
+                result++;
+            }
         }
     }
 }
