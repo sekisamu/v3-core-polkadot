@@ -2,7 +2,6 @@ import { Decimal } from 'decimal.js'
 import { ContractTransactionResponse } from 'ethers'
 import { ethers } from 'hardhat'
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers'
-import { loadFixture } from '@nomicfoundation/hardhat-network-helpers'
 import { MockTimeUniswapV3Pool } from '../typechain-types/test/MockTimeUniswapV3Pool'
 import { TestERC20 } from '../typechain-types/test/TestERC20'
 import { TestUniswapV3Callee } from '../typechain-types/test/TestUniswapV3Callee'
@@ -450,21 +449,14 @@ const TEST_POOLS: PoolTestCase[] = [
 describe('UniswapV3Pool swap tests', () => {
   let wallet: SignerWithAddress, other: SignerWithAddress
 
-  let loadFixture: ReturnType<typeof createFixtureLoader>
-
-  before('create fixture loader', async () => {
+  before('get signers', async () => {
     ;[wallet, other] = await (ethers as any).getSigners()
-
-    loadFixture = createFixtureLoader([wallet])
   })
 
   for (const poolCase of TEST_POOLS) {
     describe(poolCase.description, () => {
       const poolCaseFixture = async () => {
-        const { createPool, token0, token1, swapTargetCallee: swapTarget } = await poolFixture(
-          [wallet],
-          waffle.provider
-        )
+        const { createPool, token0, token1, swapTargetCallee: swapTarget } = await poolFixture()
         const pool = await createPool(poolCase.feeAmount, poolCase.tickSpacing)
         const poolFunctions = createPoolFunctions({ swapTarget, token0, token1, pool })
         await pool.initialize(poolCase.startingPrice)
@@ -484,15 +476,15 @@ describe('UniswapV3Pool swap tests', () => {
       let token0: TestERC20
       let token1: TestERC20
 
-      let poolBalance0: BigNumber
-      let poolBalance1: BigNumber
+      let poolBalance0: bigint
+      let poolBalance1: bigint
 
       let pool: MockTimeUniswapV3Pool
       let swapTarget: TestUniswapV3Callee
       let poolFunctions: PoolFunctions
 
       beforeEach('load fixture', async () => {
-        ;({ token0, token1, pool, poolFunctions, poolBalance0, poolBalance1, swapTarget } = await loadFixture(poolCaseFixture))
+        ;({ token0, token1, pool, poolFunctions, poolBalance0, poolBalance1, swapTarget } = await poolCaseFixture())
       })
 
       afterEach('check can burn positions', async () => {

@@ -73,7 +73,7 @@ describe('UniswapV3Pool gas tests', () => {
       let mint: MintFunction
 
       beforeEach('load the fixture', async () => {
-        ;({ swapExact0For1, pool, mint, swapToHigherPrice, swapToLowerPrice } = await loadFixture(gasTestFixture))
+        ;({ swapExact0For1, pool, mint, swapToHigherPrice, swapToLowerPrice } = await gasTestFixture())
       })
 
       describe('#swapExact0For1', () => {

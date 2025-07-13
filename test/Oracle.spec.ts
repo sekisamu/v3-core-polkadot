@@ -5,7 +5,6 @@ import checkObservationEquals from './shared/checkObservationEquals'
 import snapshotGasCost from './shared/snapshotGasCost'
 import { MaxUint128 } from './shared/utilities'
 import { TEST_POOL_START_TIME } from './shared/fixtures'
-import { loadFixture } from '@nomicfoundation/hardhat-network-helpers'
 import { OracleTest } from '../typechain-types/test/OracleTest'
 
 describe('Oracle', () => {
@@ -528,7 +527,7 @@ describe('Oracle', () => {
         }
         let oracle: OracleTest
         beforeEach('set up observations', async () => {
-          oracle = await loadFixture(oracleFixture5Observations)
+          oracle = await oracleFixture5Observations()
         })
 
         const observeSingle = async (secondsAgo: bigint) => {
@@ -680,7 +679,7 @@ describe('Oracle', () => {
     }
 
     beforeEach('create a full oracle', async () => {
-      oracle = await loadFixture(maxedOutOracleFixture)
+      oracle = await maxedOutOracleFixture()
     })
 
     it('has max cardinality next', async () => {
