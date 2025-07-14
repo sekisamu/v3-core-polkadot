@@ -41,8 +41,8 @@ const config: HardhatUserConfig = {
       : {},
     local: {
       polkavm: true,
-      // url: 'http://127.0.0.1:8545',
-      url: 'http://maat:8545',
+      url: 'http://127.0.0.1:8545',
+      // url: 'http://maat:8545',
       accounts: [
         process.env.LOCAL_PRIV_KEY as string,
         process.env.AH_PRIV_KEY as string,
