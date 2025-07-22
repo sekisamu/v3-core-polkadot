@@ -16,7 +16,7 @@ const config: HardhatUserConfig = {
       compilerPath: "~/.cargo/bin/resolc-0.3.0",
       optimizer: {
         enabled: true,
-        parameters: "z",
+        parameters: "s",
         fallbackOz: true,
       },
     }
