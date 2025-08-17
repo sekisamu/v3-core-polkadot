@@ -2,6 +2,7 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-ethers";
 import "@parity/hardhat-polkadot";
+import "hardhat-jest";
 
 import * as dotenv from "dotenv";
 dotenv.config();
@@ -13,7 +14,7 @@ const config: HardhatUserConfig = {
   resolc: {
     compilerSource: "binary",
     settings: {
-      compilerPath: "~/.cargo/bin/resolc-0.3.0",
+      compilerPath: "resolc-0.3.0",
       optimizer: {
         enabled: true,
         parameters: "s",
@@ -29,12 +30,12 @@ const config: HardhatUserConfig = {
       ? {
           polkavm: true,
           nodeConfig: {
-            nodeBinaryPath: "../../../code/polkadot-sdk/target/release/substrate-node",
+            nodeBinaryPath: "../revive-dev-node",
             rpcPort: 8000,
             dev: true,
           },
           adapterConfig: {
-            adapterBinaryPath: "../../../code/polkadot-sdk/target/release/eth-rpc",
+            adapterBinaryPath: "../eth-rpc",
             dev: true,
           },
         }
