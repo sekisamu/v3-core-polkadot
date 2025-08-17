@@ -2,7 +2,6 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-ethers";
 import "@parity/hardhat-polkadot";
-import "hardhat-jest";
 
 import * as dotenv from "dotenv";
 dotenv.config();
