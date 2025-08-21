@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.0;
 
-import '../interfaces/IUniswapV3PoolDeployer.sol';
+import "../interfaces/IUniswapV3PoolDeployer.sol";
 
-import './MockTimeUniswapV3Pool.sol';
+import "./MockTimeUniswapV3Pool.sol";
 
 contract MockTimeUniswapV3PoolDeployer is IUniswapV3PoolDeployer {
     struct Parameters {
@@ -25,9 +25,19 @@ contract MockTimeUniswapV3PoolDeployer is IUniswapV3PoolDeployer {
         uint24 fee,
         int24 tickSpacing
     ) external returns (address pool) {
-        parameters = Parameters({factory: factory, token0: token0, token1: token1, fee: fee, tickSpacing: tickSpacing});
+        parameters = Parameters({
+            factory: factory,
+            token0: token0,
+            token1: token1,
+            fee: fee,
+            tickSpacing: tickSpacing
+        });
         pool = address(
-            new MockTimeUniswapV3Pool{salt: keccak256(abi.encodePacked(token0, token1, fee, tickSpacing))}()
+            new MockTimeUniswapV3Pool{
+                salt: keccak256(
+                    abi.encodePacked(token0, token1, fee, tickSpacing)
+                )
+            }()
         );
         emit PoolDeployed(pool);
         delete parameters;
