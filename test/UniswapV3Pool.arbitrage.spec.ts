@@ -4,8 +4,7 @@ import { ethers } from 'hardhat'
 import { MockTimeUniswapV3Pool } from '../typechain-types/test/MockTimeUniswapV3Pool'
 import { TickMathTest } from '../typechain-types/test/TickMathTest'
 import { UniswapV3PoolSwapTest } from '../typechain-types/test/UniswapV3PoolSwapTest'
-import { expect } from 'chai'
-
+import { expect } from './shared/expect'
 import { poolFixture } from './shared/fixtures'
 import { formatPrice, formatTokenAmount } from './shared/format'
 

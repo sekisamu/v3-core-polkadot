@@ -14,9 +14,16 @@ describe('SwapMath', () => {
   })
   
   async function deploySwapMath() {
-    const [walletForLargeContract] = getWallets(1)
-    const swapMathTestFactory = await ethers.getContractFactory('SwapMathTest', walletForLargeContract)
-    const sqrtPriceMathTestFactory = await ethers.getContractFactory('SqrtPriceMathTest', walletForLargeContract)
+    let swapMathTestFactory;
+    let sqrtPriceMathTestFactory;
+    if(hre.network.config.polkavm) {
+      let walletForLargeContract = getWallets(1)[0]
+      swapMathTestFactory = await ethers.getContractFactory('SwapMathTest', walletForLargeContract)
+      sqrtPriceMathTestFactory = await ethers.getContractFactory('SqrtPriceMathTest', walletForLargeContract)
+    } else {
+      swapMathTestFactory = await ethers.getContractFactory('SwapMathTest')
+      sqrtPriceMathTestFactory = await ethers.getContractFactory('SqrtPriceMathTest')
+    }
     
     const swapMath = await swapMathTestFactory.deploy()
     await swapMath.waitForDeployment()

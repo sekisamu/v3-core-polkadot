@@ -25,6 +25,12 @@ describe('NoDelegateCall', () => {
   })
 
   it('measures runtime overhead of delegate call protection', async () => {
+    // Skip gas tests on polkavm networks
+    if (process.env.USE_POLKAVM === "true") {
+      console.log('Skipping gas test on polkavm network')
+      return
+    }
+    
     const cannotBeDelegateCalledGas = await base.getGasCostOfCannotBeDelegateCalled()
     const canBeDelegateCalledGas = await base.getGasCostOfCanBeDelegateCalled()
     await snapshotGasCost(cannotBeDelegateCalledGas - canBeDelegateCalledGas)

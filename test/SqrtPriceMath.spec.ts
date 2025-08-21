@@ -8,10 +8,14 @@ import { encodePriceSqrt, expandTo18Decimals, getWallets, MaxUint128 } from './s
 
 describe('SqrtPriceMath', () => {
   let sqrtPriceMath: SqrtPriceMathTest
-  let walletForLargeContract: Wallet
   beforeEach(async () => {
-    walletForLargeContract = getWallets(1)[0]
-    const sqrtPriceMathTestFactory = await ethers.getContractFactory('SqrtPriceMathTest', walletForLargeContract)
+    let sqrtPriceMathTestFactory;
+    if (hre.network.config.polkavm) {
+      let walletForLargeContract = getWallets(1)[0]
+      sqrtPriceMathTestFactory = await ethers.getContractFactory('SqrtPriceMathTest', walletForLargeContract)
+    } else {
+      sqrtPriceMathTestFactory = await ethers.getContractFactory('SqrtPriceMathTest')
+    }
     sqrtPriceMath = await sqrtPriceMathTestFactory.deploy() as SqrtPriceMathTest
     await sqrtPriceMath.waitForDeployment()
   })

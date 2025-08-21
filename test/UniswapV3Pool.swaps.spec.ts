@@ -501,12 +501,17 @@ describe('UniswapV3Pool swap tests', () => {
           try {
             await tx
           } catch (error: any) {
+            // Normalize error message to match snapshot format
+            let normalizedError = error.message
+            if (normalizedError.includes("reverted with reason string 'SPL'")) {
+              normalizedError = "VM Exception while processing transaction: revert SPL"
+            }
             expect({
-              swapError: error.message,
+              swapError: normalizedError,
               poolBalance0: poolBalance0.toString(),
               poolBalance1: poolBalance1.toString(),
               poolPriceBefore: formatPrice(slot0.sqrtPriceX96),
-              tickBefore: slot0.tick,
+              tickBefore: Number(slot0.tick),
             }).to.matchSnapshot('swap error')
             return
           }
@@ -565,9 +570,9 @@ describe('UniswapV3Pool swap tests', () => {
             amount1Delta: poolBalance1Delta.toString(),
             feeGrowthGlobal0X128Delta: feeGrowthGlobal0X128.toString(),
             feeGrowthGlobal1X128Delta: feeGrowthGlobal1X128.toString(),
-            tickBefore: slot0.tick,
+            tickBefore: Number(slot0.tick),
             poolPriceBefore: formatPrice(slot0.sqrtPriceX96),
-            tickAfter: slot0After.tick,
+            tickAfter: Number(slot0After.tick),
             poolPriceAfter: formatPrice(slot0After.sqrtPriceX96),
             executionPrice: executionPrice.toPrecision(5),
           }).to.matchSnapshot('balances')

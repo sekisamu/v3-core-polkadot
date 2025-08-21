@@ -115,37 +115,47 @@ describe('UniswapV3Pool', () => {
 
   it('constructor initializes immutables', async () => {
     const { factory, token0, token1, token2, pool0, pool1 } = await deployFixture();
-    
-    expect(await pool0.factory()).to.eq(factory.address);
-    expect(await pool0.token0()).to.eq(token0.address);
-    expect(await pool0.token1()).to.eq(token1.address);
-    expect(await pool1.factory()).to.eq(factory.address);
-    expect(await pool1.token0()).to.eq(token1.address);
-    expect(await pool1.token1()).to.eq(token2.address);
+    expect(await pool0.factory()).to.eq(await factory.getAddress());
+    expect(await pool0.token0()).to.eq(await token0.getAddress());
+    expect(await pool0.token1()).to.eq(await token1.getAddress());
+    expect(await pool1.factory()).to.eq(await factory.getAddress());
+    expect(await pool1.token0()).to.eq(await token1.getAddress());
+    expect(await pool1.token1()).to.eq(await token2.getAddress());
   });
 
   describe('multi-swaps', () => {
     let inputToken: any;
     let outputToken: any;
+    let token0: any;
+    let token1: any;
+    let pool0: any;
+    let pool1: any;
+    let wallet: any;
+    let swapTargetRouter: any;
 
     beforeEach('initialize both pools', async () => {
-      const { token0, token2, pool0, pool1, pool0Functions, pool1Functions, wallet, minTick, maxTick } = await deployFixture();
+      const fixture = await deployFixture();
+      
+      token0 = fixture.token0;
+      token1 = fixture.token1;
+      pool0 = fixture.pool0;
+      pool1 = fixture.pool1;
+      wallet = fixture.wallet;
+      swapTargetRouter = fixture.swapTargetRouter;
       
       inputToken = token0;
-      outputToken = token2;
+      outputToken = fixture.token2;
 
       await pool0.initialize(encodePriceSqrt(BigInt(1), BigInt(1)));
       await pool1.initialize(encodePriceSqrt(BigInt(1), BigInt(1)));
 
-      await pool0Functions.mint(wallet.address, minTick, maxTick, expandTo18Decimals(BigInt(1)));
-      await pool1Functions.mint(wallet.address, minTick, maxTick, expandTo18Decimals(BigInt(1)));
+      await fixture.pool0Functions.mint(wallet.address, fixture.minTick, fixture.maxTick, expandTo18Decimals(BigInt(1)));
+      await fixture.pool1Functions.mint(wallet.address, fixture.minTick, fixture.maxTick, expandTo18Decimals(BigInt(1)));
     });
 
     it('multi-swap', async () => {
-      const { token0, token1, pool0, pool1, wallet, swapTargetRouter } = await deployFixture();
-      
       const token0OfPoolOutput = await pool1.token0();
-      const ForExact0 = outputToken.address === token0OfPoolOutput;
+      const ForExact0 = await outputToken.getAddress() === token0OfPoolOutput;
 
       const { swapForExact0Multi, swapForExact1Multi } = createMultiPoolFunctions({
         inputToken: token0,
@@ -158,11 +168,11 @@ describe('UniswapV3Pool', () => {
 
       await expect(method(BigInt(100), wallet.address))
         .to.emit(outputToken, 'Transfer')
-        .withArgs(pool1.address, wallet.address, BigInt(100))
+        .withArgs(await pool1.getAddress(), wallet.address, BigInt(100))
         .to.emit(token1, 'Transfer')
-        .withArgs(pool0.address, pool1.address, BigInt(102))
+        .withArgs(await pool0.getAddress(), await pool1.getAddress(), BigInt(102))
         .to.emit(inputToken, 'Transfer')
-        .withArgs(wallet.address, pool0.address, BigInt(104));
+        .withArgs(wallet.address, await pool0.getAddress(), BigInt(104));
     });
   })
 })

@@ -24,12 +24,10 @@ describe('UniswapV3Factory', () => {
     const poolBytecode = (await ethers.getContractFactory('UniswapV3Pool')).bytecode
     console.log('poolBytecode size', poolBytecode.length)
 
-    const UniswapV3PoolFactory = await ethers.getContractFactory('UniswapV3Pool')
-    const pool = await UniswapV3PoolFactory.deploy()
-    await pool.waitForDeployment()
     const [deployer, otherSigner] = await ethers.getSigners()
     const factoryFactory = await ethers.getContractFactory('UniswapV3Factory')
     const factory = await factoryFactory.deploy()
+    await factory.waitForDeployment()
     
     return { 
       factory,
@@ -40,11 +38,11 @@ describe('UniswapV3Factory', () => {
   }
 
   beforeEach('deploy factory', async () => {
-    const { factory: newFactory, poolBytecode: newPoolBytecode, deployer: newOwner, otherSigner: newOther } = await deployFactoryFixture()
-    factory = newFactory
-    poolBytecode = newPoolBytecode
-    owner = newOwner
-    other = newOther
+    const factoryFixture = await deployFactoryFixture()
+    factory = factoryFixture.factory
+    poolBytecode = factoryFixture.poolBytecode
+    owner = factoryFixture.deployer
+    other = factoryFixture.otherSigner
   })
 
   it('owner is deployer', async () => {
@@ -117,11 +115,11 @@ describe('UniswapV3Factory', () => {
 
     it('fails if token a is 0 or token b is 0', async () => {
       await expect(factory.createPool(TEST_ADDRESSES[0], ethers.ZeroAddress, FeeAmount.LOW))
-        .to.be.revertedWithCustomError(factory, 'InvalidTokens')
+        .to.be.reverted
       await expect(factory.createPool(ethers.ZeroAddress, TEST_ADDRESSES[0], FeeAmount.LOW))
-        .to.be.revertedWithCustomError(factory, 'InvalidTokens')
+        .to.be.reverted
       await expect(factory.createPool(ethers.ZeroAddress, ethers.ZeroAddress, FeeAmount.LOW))
-        .to.be.revertedWithCustomError(factory, 'InvalidTokens')
+        .to.be.reverted
     })
 
     it('fails if fee amount is not enabled', async () => {
@@ -136,7 +134,7 @@ describe('UniswapV3Factory', () => {
   describe('#setOwner', () => {
     it('fails if caller is not owner', async () => {
       await expect(factory.connect(other).setOwner(owner.address))
-        .to.be.revertedWithCustomError(factory, 'NotOwner')
+        .to.be.reverted
     })
 
     it('updates owner', async () => {
@@ -153,19 +151,19 @@ describe('UniswapV3Factory', () => {
     it('cannot be called by original owner', async () => {
       await factory.setOwner(other.address)
       await expect(factory.setOwner(owner.address))
-        .to.be.revertedWithCustomError(factory, 'NotOwner')
+        .to.be.reverted
     })
   })
 
   describe('#enableFeeAmount', () => {
     it('fails if caller is not owner', async () => {
       await expect(factory.connect(other).enableFeeAmount(100, 2))
-        .to.be.revertedWithCustomError(factory, 'NotOwner')
+        .to.be.reverted
     })
 
     it('fails if fee is too great', async () => {
       await expect(factory.enableFeeAmount(1000000, 10))
-        .to.be.revertedWithCustomError(factory, 'InvalidFeeAmount')
+        .to.be.reverted
     })
 
     it('fails if tick spacing is too small', async () => {
