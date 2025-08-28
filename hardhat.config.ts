@@ -13,7 +13,7 @@ const config: HardhatUserConfig = {
   resolc: {
     compilerSource: "binary",
     settings: {
-      compilerPath: "resolc-0.3.0",
+      resolcPath: "resolc-0.3.0",
       optimizer: {
         enabled: true,
         parameters: "s",

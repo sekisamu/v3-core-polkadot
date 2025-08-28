@@ -10,6 +10,9 @@
   "author": "",
   "license": "ISC",
   "description": "",
+  "overrides": {
+    "lru-cache": "^11.1.0"
+  },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
     "@nomicfoundation/hardhat-ethers": "^3.0.0",
@@ -37,7 +40,8 @@
     "typescript": ">=4.5.0"
   },
   "dependencies": {
-    "@parity/hardhat-polkadot": "0.1.8",
-    "decimal.js": "^10.5.0"
+    "@parity/hardhat-polkadot": "0.1.10",
+    "decimal.js": "^10.5.0",
+    "dockerode": "^4.0.7"
   }
 }
